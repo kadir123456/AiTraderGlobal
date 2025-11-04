@@ -19,7 +19,7 @@ const Auth = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
-  const { user, login, signup, loginWithGoogle } = useAuth();
+  const { user, loading: authLoading, login, signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
@@ -28,6 +28,9 @@ const Auth = () => {
 
   // Redirect if already logged in
   useEffect(() => {
+    // Don't redirect while auth is still loading
+    if (authLoading) return;
+    
     if (user) {
       // If user just logged in and has a selected plan, open checkout
       if (selectedPlan && selectedPlan !== 'free') {
@@ -43,9 +46,9 @@ const Auth = () => {
           });
         });
       }
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     }
-  }, [user, navigate, selectedPlan]);
+  }, [user, authLoading, navigate, selectedPlan]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
