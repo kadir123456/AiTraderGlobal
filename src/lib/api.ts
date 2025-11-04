@@ -3,6 +3,15 @@ import axios from 'axios';
 // API Base URL - update this with your Render backend URL in production
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000';
 
+// Debug logging
+console.log('🔧 API Configuration:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_TRADING_API_URL: import.meta.env.VITE_TRADING_API_URL,
+  Final_API_BASE_URL: API_BASE_URL,
+  Mode: import.meta.env.MODE,
+  All_ENV_VARS: import.meta.env
+});
+
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
