@@ -14,8 +14,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
   const { t } = useTranslation();
-  const { logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
   const { positions, loading: positionsLoading, refreshPositions } = useTrading();
   const { plan, loading: planLoading } = useSubscription();
 
