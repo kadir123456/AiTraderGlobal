@@ -111,6 +111,25 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* Nasıl Kullanılır */}
+        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
+          <CardHeader>
+            <CardTitle className="text-xl">Nasıl Kullanılır?</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
+              <li>Ayarlar &gt; Borsalar sekmesinden API anahtarınızı ekleyin (Binance/Bybit/OKX).</li>
+              <li>Aboneliğiniz plan limitlerini belirler. Gerekirse Ayarlar &gt; Abonelik'ten yükseltin.</li>
+              <li>Trading sayfasında sembol seçip işlem parametrelerini girin ve pozisyon açın.</li>
+              <li>Dashboard’da açık pozisyonlarınızı ve performansınızı takip edin.</li>
+            </ol>
+            <div className="mt-4 flex gap-3">
+              <Button size="sm" onClick={() => navigate('/settings')}>Ayarlar</Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>Trading’e Git</Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {(positionsLoading || planLoading) ? (
