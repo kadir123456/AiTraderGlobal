@@ -2,12 +2,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { openCheckout } from "@/lib/lemonsqueezy";
+import { toast } from "@/hooks/use-toast";
 
 const Pricing = () => {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const plans = [
     {
+      id: 'free' as const,
       name: t('pricing.free_name'),
       price: t('pricing.free_price'),
       period: t('pricing.free_period'),
@@ -23,6 +30,7 @@ const Pricing = () => {
       highlighted: false,
     },
     {
+      id: 'pro' as const,
       name: t('pricing.pro_name'),
       price: t('pricing.pro_price'),
       period: t('pricing.pro_period'),
@@ -40,6 +48,7 @@ const Pricing = () => {
       highlighted: true,
     },
     {
+      id: 'enterprise' as const,
       name: t('pricing.enterprise_name'),
       price: t('pricing.enterprise_price'),
       period: t('pricing.enterprise_period'),
@@ -57,6 +66,36 @@ const Pricing = () => {
     },
   ];
 
+  const handlePlanSelect = async (planId: 'free' | 'pro' | 'enterprise') => {
+    // If user not logged in, redirect to auth
+    if (!user) {
+      navigate('/auth', { state: { selectedPlan: planId } });
+      return;
+    }
+
+    // If free plan, redirect to dashboard
+    if (planId === 'free') {
+      navigate('/dashboard');
+      return;
+    }
+
+    // Open LemonSqueezy checkout
+    try {
+      await openCheckout({
+        planId,
+        email: user.email || '',
+        name: user.displayName || user.email || 'User',
+      });
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast({
+        title: "Checkout Error",
+        description: error.message || "Failed to open checkout. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <section className="py-20">
       <div className="container mx-auto px-4">
@@ -73,7 +112,7 @@ const Pricing = () => {
           {plans.map((plan, index) => (
             <Card
               key={index}
-              className={`relative border-border bg-card/50 backdrop-blur-sm ${
+              className={`relative border-border bg-card/50 backdrop-blur-sm hover:shadow-lg transition-all ${
                 plan.highlighted
                   ? "ring-2 ring-primary shadow-lg shadow-primary/20 scale-105"
                   : ""
@@ -110,6 +149,7 @@ const Pricing = () => {
                   className="w-full"
                   variant={plan.highlighted ? "default" : "outline"}
                   size="lg"
+                  onClick={() => handlePlanSelect(plan.id)}
                 >
                   {plan.cta}
                 </Button>

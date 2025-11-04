@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { openCheckout } from "@/lib/lemonsqueezy";
+import { toast } from "@/hooks/use-toast";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,14 +21,31 @@ const Auth = () => {
   
   const { user, login, signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
+  
+  const selectedPlan = (location.state as any)?.selectedPlan;
 
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
+      // If user just logged in and has a selected plan, open checkout
+      if (selectedPlan && selectedPlan !== 'free') {
+        openCheckout({
+          planId: selectedPlan,
+          email: user.email || '',
+          name: user.displayName || user.email || 'User',
+        }).catch((error) => {
+          toast({
+            title: "Checkout Error",
+            description: error.message,
+            variant: "destructive",
+          });
+        });
+      }
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, selectedPlan]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

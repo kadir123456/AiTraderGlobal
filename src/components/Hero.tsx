@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Activity, TrendingUp, Zap, Shield } from "lucide-react";
+import { Activity, TrendingUp, Zap, Shield, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -17,6 +17,19 @@ const Hero = () => {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
             <Activity className="h-4 w-4 text-primary animate-pulse" />
             <span className="text-sm font-medium">{t('hero.badge')}</span>
+          </div>
+          
+          {/* Multi-Exchange Support Badge */}
+          <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+            <span className="px-3 py-1 bg-card/50 border border-border rounded-full">Binance</span>
+            <span className="px-3 py-1 bg-card/50 border border-border rounded-full">Bybit</span>
+            <span className="px-3 py-1 bg-card/50 border border-border rounded-full">OKX</span>
+            <span className="px-3 py-1 bg-card/50 border border-border rounded-full">KuCoin</span>
+            <span className="px-3 py-1 bg-card/50 border border-border rounded-full">MEXC</span>
+            <span className="px-3 py-1 bg-primary/20 border border-primary/40 rounded-full font-medium flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              +More
+            </span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">

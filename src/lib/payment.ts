@@ -1,7 +1,7 @@
 // Payment Integration Module
-// Supports Paddle and LemonSqueezy for global payments
+// LemonSqueezy for global payments
 
-export type SubscriptionTier = 'free' | 'pro' | 'unlimited';
+export type SubscriptionTier = 'free' | 'pro' | 'enterprise';
 
 export interface SubscriptionPlan {
   id: SubscriptionTier;
@@ -42,10 +42,10 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     autoTrading: true,
     customStrategies: false,
   },
-  unlimited: {
-    id: 'unlimited',
-    name: 'Unlimited',
-    price: 99,
+  enterprise: {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: 299,
     currency: 'USD',
     features: [
       'Unlimited exchanges',
@@ -60,53 +60,6 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     autoTrading: true,
     customStrategies: true,
   },
-};
-
-// Paddle Configuration
-export const initializePaddle = async () => {
-  const paddleVendorId = import.meta.env.VITE_PADDLE_VENDOR_ID;
-  
-  if (!paddleVendorId) {
-    console.warn('Paddle vendor ID not configured');
-    return null;
-  }
-
-  // Load Paddle.js script
-  const script = document.createElement('script');
-  script.src = 'https://cdn.paddle.com/paddle/paddle.js';
-  script.async = true;
-  document.head.appendChild(script);
-
-  return new Promise((resolve) => {
-    script.onload = () => {
-      if (window.Paddle) {
-        window.Paddle.Setup({ vendor: parseInt(paddleVendorId) });
-        resolve(window.Paddle);
-      }
-    };
-  });
-};
-
-// LemonSqueezy Configuration
-export const initializeLemonSqueezy = () => {
-  const lemonSqueezyStoreId = import.meta.env.VITE_LEMONSQUEEZY_STORE_ID;
-  
-  if (!lemonSqueezyStoreId) {
-    console.warn('LemonSqueezy store ID not configured');
-    return null;
-  }
-
-  window.createLemonSqueezy = () => {
-    window.LemonSqueezy?.Setup({ storeId: lemonSqueezyStoreId });
-  };
-
-  // Load LemonSqueezy script
-  const script = document.createElement('script');
-  script.src = 'https://app.lemonsqueezy.com/js/lemon.js';
-  script.async = true;
-  script.defer = true;
-  script.onload = () => window.createLemonSqueezy?.();
-  document.head.appendChild(script);
 };
 
 // Check user's subscription tier and permissions
@@ -127,12 +80,3 @@ export const checkUserPermission = (
 export const getExchangeLimit = (userTier: SubscriptionTier): number => {
   return SUBSCRIPTION_PLANS[userTier].exchangeLimit;
 };
-
-// Type augmentation for window object
-declare global {
-  interface Window {
-    Paddle?: any;
-    LemonSqueezy?: any;
-    createLemonSqueezy?: () => void;
-  }
-}

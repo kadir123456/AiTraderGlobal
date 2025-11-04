@@ -1,67 +1,73 @@
-import { useState } from "react";
+import { useMemo, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, DollarSign, TrendingUp, BarChart3 } from "lucide-react";
+import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StatsCard } from "@/components/StatsCard";
 import { PositionCard } from "@/components/PositionCard";
-
-interface Position {
-  id: string;
-  symbol: string;
-  side: 'LONG' | 'SHORT';
-  entry: number;
-  current: number;
-  pnl: number;
-  pnlPercent: number;
-  exchange: string;
-}
+import { useTrading } from "@/hooks/useTrading";
+import { useSubscription } from "@/hooks/useSubscription";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Dashboard = () => {
   const { t } = useTranslation();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { positions, loading: positionsLoading, refreshPositions } = useTrading();
+  const { plan, loading: planLoading } = useSubscription();
 
-  // Dummy data for now - will be replaced with Firebase data
-  const [positions] = useState<Position[]>([
-    { id: "1", symbol: "BTC/USDT", side: "LONG", entry: 43250, current: 44100, pnl: 850, pnlPercent: 1.97, exchange: "Binance" },
-    { id: "2", symbol: "ETH/USDT", side: "SHORT", entry: 2280, current: 2265, pnl: 15, pnlPercent: 0.66, exchange: "Bybit" },
-    { id: "3", symbol: "SOL/USDT", side: "LONG", entry: 98.5, current: 99.2, pnl: 0.7, pnlPercent: 0.71, exchange: "Binance" },
-  ]);
+  // Auto-refresh positions every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshPositions();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [refreshPositions]);
 
-  const stats = [
-    { 
-      label: t('dashboard.total_balance'), 
-      value: "$12,450.00", 
-      change: "+5.2%", 
-      icon: DollarSign, 
-      trend: "up" as const
-    },
-    { 
-      label: t('dashboard.open_positions'), 
-      value: "3", 
-      change: t('dashboard.active'), 
-      icon: Activity, 
-      trend: "neutral" as const
-    },
-    { 
-      label: t('dashboard.today_pnl'), 
-      value: "+$865.70", 
-      change: "+3.4%", 
-      icon: TrendingUp, 
-      trend: "up" as const
-    },
-    { 
-      label: t('dashboard.win_rate'), 
-      value: "68%", 
-      change: t('dashboard.last_30_days'), 
-      icon: BarChart3, 
-      trend: "up" as const
-    },
-  ];
+  // Calculate real stats from positions
+  const stats = useMemo(() => {
+    const totalPnL = positions.reduce((sum, pos) => sum + pos.pnl, 0);
+    const totalPnLPercent = positions.length > 0 
+      ? positions.reduce((sum, pos) => sum + pos.pnlPercent, 0) / positions.length 
+      : 0;
+
+    // Calculate total balance (would come from exchange API in production)
+    const estimatedBalance = 10000 + totalPnL;
+
+    return [
+      { 
+        label: t('dashboard.total_balance'), 
+        value: `$${estimatedBalance.toFixed(2)}`, 
+        change: totalPnL >= 0 ? `+${totalPnL.toFixed(2)}` : `${totalPnL.toFixed(2)}`, 
+        icon: DollarSign, 
+        trend: totalPnL >= 0 ? "up" as const : "neutral" as const
+      },
+      { 
+        label: t('dashboard.open_positions'), 
+        value: positions.length.toString(), 
+        change: t('dashboard.active'), 
+        icon: Activity, 
+        trend: "neutral" as const
+      },
+      { 
+        label: t('dashboard.today_pnl'), 
+        value: totalPnL >= 0 ? `+$${totalPnL.toFixed(2)}` : `-$${Math.abs(totalPnL).toFixed(2)}`, 
+        change: totalPnLPercent >= 0 ? `+${totalPnLPercent.toFixed(2)}%` : `${totalPnLPercent.toFixed(2)}%`, 
+        icon: TrendingUp, 
+        trend: totalPnL >= 0 ? "up" as const : "neutral" as const
+      },
+      { 
+        label: t('dashboard.current_plan'), 
+        value: plan.name, 
+        change: `${plan.exchangeLimit === -1 ? '∞' : plan.exchangeLimit} exchanges`, 
+        icon: BarChart3, 
+        trend: "up" as const
+      },
+    ];
+  }, [positions, plan, t]);
 
   const handleLogout = async () => {
     await logout();
@@ -84,8 +90,12 @@ const Dashboard = () => {
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
-              <Button variant="outline" size="sm">{t('dashboard.settings')}</Button>
-              <Button size="sm">{t('dashboard.connect_exchange')}</Button>
+              <Button variant="default" size="sm" onClick={() => navigate('/trading')}>
+                {t('dashboard.open_trade')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>
+                {t('dashboard.settings')}
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleLogout}>Logout</Button>
             </div>
           </div>
@@ -96,19 +106,52 @@ const Dashboard = () => {
       <main className="container mx-auto px-4 py-8">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => (
-            <StatsCard key={stat.label} {...stat} />
-          ))}
+          {(positionsLoading || planLoading) ? (
+            Array(4).fill(0).map((_, i) => (
+              <Card key={i} className="border-border bg-card/50 backdrop-blur-sm">
+                <CardContent className="pt-6">
+                  <Skeleton className="h-20 w-full" />
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            stats.map((stat) => (
+              <StatsCard key={stat.label} {...stat} />
+            ))
+          )}
         </div>
 
         {/* Open Positions */}
         <Card className="border-border bg-card/50 backdrop-blur-sm">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl">{t('dashboard.positions_title')}</CardTitle>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => refreshPositions()}
+              disabled={positionsLoading}
+            >
+              <RefreshCw className={`h-4 w-4 ${positionsLoading ? 'animate-spin' : ''}`} />
+            </Button>
           </CardHeader>
           <CardContent>
-            {positions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No open positions</div>
+            {positionsLoading ? (
+              <div className="space-y-4">
+                {Array(3).fill(0).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ) : positions.length === 0 ? (
+              <div className="text-center py-12">
+                <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-lg font-medium mb-2">{t('dashboard.no_positions')}</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {t('dashboard.no_positions_desc')}
+                </p>
+                <Button onClick={() => navigate('/trading')}>
+                  {t('dashboard.open_trade')}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-4">
                 {positions.map((position) => (
