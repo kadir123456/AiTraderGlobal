@@ -104,6 +104,7 @@
   },
   "dashboard": {
     "settings": "Ayarlar",
+    "logout": "Çıkış Yap",
     "connect_exchange": "Borsa Bağla",
     "open_trade": "İşlem Aç",
     "total_balance": "Toplam Bakiye",
@@ -121,7 +122,14 @@
     "pnl": "K/Z",
     "close": "Kapat",
     "long": "LONG",
-    "short": "SHORT"
+    "short": "SHORT",
+    "how_to_use": "Nasıl Kullanılır?",
+    "how_to_step1": "Ayarlar > Borsalar sekmesinden API anahtarınızı ekleyin (Binance/Bybit/OKX).",
+    "how_to_step2": "Aboneliğiniz plan limitlerini belirler. Gerekirse Ayarlar > Abonelik'ten yükseltin.",
+    "how_to_step3": "Trading sayfasında sembol seçip işlem parametrelerini girin ve pozisyon açın.",
+    "how_to_step4": "Dashboard'da açık pozisyonlarınızı ve performansınızı takip edin.",
+    "go_to_settings": "Ayarlar",
+    "go_to_trading": "Trading'e Git"
   },
   "trading": {
     "title": "Trading",
@@ -201,6 +209,12 @@
     "security_1": "API anahtarlarınızı asla kimseyle paylaşmayın",
     "security_2": "Sadece OKUMA ve TRADE izinlerini etkinleştirin (Çekim YOK)",
     "security_3": "Anahtarlarınız banka seviyesi güvenlik ile şifrelenir",
+    "security_4": "API oluştururken IP kısıtlamasını etkinleştirin ve aşağıdaki IP'leri ekleyin",
+    "ip_whitelist_title": "IP Whitelist Bilgisi",
+    "ip_whitelist_description": "Borsa API anahtarınızı oluştururken, güvenlik için bu IP adreslerini whitelist'e eklemeniz gerekmektedir:",
+    "ip_whitelist_instruction": "Borsa hesabınızda API ayarları > IP kısıtlaması bölümünden bu IP'leri ekleyin",
+    "copy_ip": "Kopyala",
+    "copied": "Kopyalandı!",
     "connect": "Borsayı Bağla",
     "fill_all_fields": "Lütfen tüm alanları doldurun",
     "connected_successfully": "Borsa başarıyla bağlandı",

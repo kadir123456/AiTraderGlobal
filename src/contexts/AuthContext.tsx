@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  onIdTokenChanged,
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup
@@ -37,12 +38,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
+      setUser(fbUser);
       setLoading(false);
+      if (fbUser) {
+        try {
+          const token = await fbUser.getIdToken();
+          localStorage.setItem('auth_token', token);
+        } catch (e) {
+          console.error('Failed to get ID token:', e);
+        }
+      } else {
+        localStorage.removeItem('auth_token');
+      }
     });
 
-    return unsubscribe;
+    const unsubscribeToken = onIdTokenChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const token = await fbUser.getIdToken();
+          localStorage.setItem('auth_token', token);
+        } catch (e) {
+          console.error('Failed to refresh ID token:', e);
+        }
+      } else {
+        localStorage.removeItem('auth_token');
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeToken();
+    };
   }, []);
 
   const signup = async (email: string, password: string) => {
@@ -80,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await signOut(auth);
+      localStorage.removeItem('auth_token');
       toast.success('Logged out successfully');
     } catch (error) {
       console.error('Logout error:', error);

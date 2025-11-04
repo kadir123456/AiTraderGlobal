@@ -1,0 +1,75 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        
+        "profile": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          ".validate": "newData.hasChildren(['displayName', 'email'])"
+        },
+        
+        "exchanges": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          "$exchangeId": {
+            ".validate": "newData.hasChildren(['name', 'status', 'addedAt']) && newData.child('name').isString() && newData.child('status').isString()"
+          }
+        },
+        
+        "settings": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          "trading": {
+            ".validate": "newData.hasChildren() && (!newData.hasChild('takeProfit') || newData.child('takeProfit').isNumber()) && (!newData.hasChild('stopLoss') || newData.child('stopLoss').isNumber())"
+          },
+          "notifications": {
+            ".validate": "newData.hasChildren()"
+          }
+        },
+        
+        "subscription": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          ".validate": "newData.hasChildren(['plan', 'status']) && newData.child('plan').isString() && newData.child('status').isString()"
+        },
+        
+        "positions": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          "$positionId": {
+            ".validate": "newData.hasChildren(['symbol', 'type', 'entryPrice', 'amount', 'timestamp']) && newData.child('symbol').isString() && newData.child('type').isString() && newData.child('entryPrice').isNumber() && newData.child('amount').isNumber()"
+          }
+        },
+        
+        "trades": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          "$tradeId": {
+            ".validate": "newData.hasChildren(['symbol', 'side', 'price', 'quantity', 'timestamp']) && newData.child('symbol').isString() && newData.child('side').isString() && newData.child('price').isNumber() && newData.child('quantity').isNumber()"
+          }
+        }
+      }
+    },
+    
+    "secure_keys": {
+      "$uid": {
+        ".read": false,
+        ".write": false
+      }
+    },
+    
+    "public": {
+      ".read": true,
+      ".write": false,
+      "config": {
+        ".read": true
+      },
+      "announcements": {
+        ".read": true
+      }
+    }
+  }
+}

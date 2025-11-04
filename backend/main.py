@@ -24,6 +24,7 @@ app.add_middleware(
 # Environment variables
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "32-char-encryption-key-change")
+FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyDqAsiITYyPK9bTuGGz7aVBkZ7oLB2Kt3U")
 
 # Models
 class UserLogin(BaseModel):
@@ -74,13 +75,45 @@ def verify_jwt_token(token: str) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+async def verify_firebase_token_with_identitytoolkit(id_token: str) -> dict:
+    """Verify Firebase ID token by calling Google Identity Toolkit.
+    Returns minimal user info on success.
+    """
+    if not FIREBASE_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing FIREBASE_API_KEY on server")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={FIREBASE_API_KEY}",
+                json={"idToken": id_token},
+                timeout=10.0,
+            )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid Firebase ID token")
+        data = resp.json()
+        users = data.get("users", [])
+        if not users:
+            raise HTTPException(status_code=401, detail="Invalid Firebase ID token")
+        u = users[0]
+        return {"user_id": u.get("localId"), "email": u.get("email")}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Failed to verify Firebase token")
+
 async def get_current_user(authorization: str = Header(None)):
-    """Dependency to get current authenticated user"""
+    """Dependency to get current authenticated user (supports local JWT or Firebase ID token)."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
     
     token = authorization.replace("Bearer ", "")
-    return verify_jwt_token(token)
+
+    # Try local JWT first
+    try:
+        return verify_jwt_token(token)
+    except HTTPException:
+        # Fallback to Firebase ID token
+        return await verify_firebase_token_with_identitytoolkit(token)
 
 # Exchange API Helpers
 async def validate_binance_api(api_key: str, api_secret: str) -> bool:

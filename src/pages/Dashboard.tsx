@@ -1,21 +1,30 @@
 import { useMemo, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw } from "lucide-react";
+import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StatsCard } from "@/components/StatsCard";
 import { PositionCard } from "@/components/PositionCard";
+import { APIHealthCheck } from "@/components/APIHealthCheck";
 import { useTrading } from "@/hooks/useTrading";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const Dashboard = () => {
   const { t } = useTranslation();
-  const { logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
   const { positions, loading: positionsLoading, refreshPositions } = useTrading();
   const { plan, loading: planLoading } = useSubscription();
 
@@ -77,18 +86,18 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 text-2xl font-bold">
-                <Activity className="h-8 w-8 text-primary" />
-                <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                  AI Trader
-                </span>
-              </div>
+              <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+              <span className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                AI Trader
+              </span>
             </div>
-            <div className="flex items-center gap-4">
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-3">
               <LanguageSwitcher />
               <Button variant="default" size="sm" onClick={() => navigate('/trading')}>
                 {t('dashboard.open_trade')}
@@ -96,7 +105,46 @@ const Dashboard = () => {
               <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>
                 {t('dashboard.settings')}
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>Logout</Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                {t('dashboard.logout')}
+              </Button>
+            </div>
+
+            {/* Mobile Navigation */}
+            <div className="flex md:hidden items-center gap-2">
+              <LanguageSwitcher />
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-64">
+                  <div className="flex flex-col gap-3 mt-8">
+                    <Button 
+                      variant="default" 
+                      className="w-full justify-start" 
+                      onClick={() => navigate('/trading')}
+                    >
+                      {t('dashboard.open_trade')}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start" 
+                      onClick={() => navigate('/settings')}
+                    >
+                      {t('dashboard.settings')}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start" 
+                      onClick={handleLogout}
+                    >
+                      {t('dashboard.logout')}
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>
@@ -104,6 +152,34 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* API Health Check */}
+        <div className="mb-6">
+          <APIHealthCheck />
+        </div>
+
+        {/* How to Use */}
+        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
+          <CardHeader>
+            <CardTitle className="text-lg sm:text-xl">{t('dashboard.how_to_use')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
+              <li>{t('dashboard.how_to_step1')}</li>
+              <li>{t('dashboard.how_to_step2')}</li>
+              <li>{t('dashboard.how_to_step3')}</li>
+              <li>{t('dashboard.how_to_step4')}</li>
+            </ol>
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              <Button size="sm" onClick={() => navigate('/settings')}>
+                {t('dashboard.go_to_settings')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>
+                {t('dashboard.go_to_trading')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {(positionsLoading || planLoading) ? (

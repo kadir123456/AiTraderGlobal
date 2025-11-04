@@ -129,7 +129,22 @@ const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProp
               <li>{t('exchange.security_1')}</li>
               <li>{t('exchange.security_2')}</li>
               <li>{t('exchange.security_3')}</li>
+              <li>{t('exchange.security_4')}</li>
             </ul>
+          </div>
+
+          {/* IP Whitelist */}
+          <div className="bg-primary/5 border border-primary/20 p-4 rounded-md text-xs">
+            <p className="font-semibold text-primary mb-2">⚠️ {t('exchange.ip_whitelist_title')}</p>
+            <p className="text-muted-foreground mb-3">{t('exchange.ip_whitelist_description')}</p>
+            <div className="bg-background/80 p-3 rounded border border-border font-mono text-[11px] space-y-1">
+              <div>18.156.158.53</div>
+              <div>18.156.42.200</div>
+              <div>52.59.103.54</div>
+              <div>74.220.51.0/24</div>
+              <div>74.220.59.0/24</div>
+            </div>
+            <p className="text-muted-foreground mt-2">{t('exchange.ip_whitelist_instruction')}</p>
           </div>
         </div>
 

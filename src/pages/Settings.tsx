@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ref, set } from "firebase/database";
 import { database } from "@/lib/firebase";
 import ExchangeList from "@/components/ExchangeList";
+import { IPWhitelistCard } from "@/components/IPWhitelistCard";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 const Settings = () => {
@@ -83,7 +84,9 @@ const Settings = () => {
           </TabsList>
 
           {/* Exchanges Tab */}
-          <TabsContent value="exchanges">
+          <TabsContent value="exchanges" className="space-y-6">
+            <IPWhitelistCard />
+            
             <Card>
               <CardHeader>
                 <CardTitle>{t('settings.exchange_connections')}</CardTitle>

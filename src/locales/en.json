@@ -104,6 +104,7 @@
   },
   "dashboard": {
     "settings": "Settings",
+    "logout": "Logout",
     "connect_exchange": "Connect Exchange",
     "open_trade": "Open Trade",
     "total_balance": "Total Balance",
@@ -121,7 +122,14 @@
     "pnl": "P&L",
     "close": "Close",
     "long": "LONG",
-    "short": "SHORT"
+    "short": "SHORT",
+    "how_to_use": "How to Use?",
+    "how_to_step1": "Add your API key from Settings > Exchanges tab (Binance/Bybit/OKX).",
+    "how_to_step2": "Your subscription determines plan limits. Upgrade from Settings > Subscription if needed.",
+    "how_to_step3": "Select symbol on Trading page, enter trade parameters and open position.",
+    "how_to_step4": "Track your open positions and performance on Dashboard.",
+    "go_to_settings": "Settings",
+    "go_to_trading": "Go to Trading"
   },
   "trading": {
     "title": "Trading",
@@ -201,6 +209,12 @@
     "security_1": "Never share your API keys with anyone",
     "security_2": "Only enable READ and TRADING permissions (NO withdrawals)",
     "security_3": "Your keys are encrypted with bank-level security",
+    "security_4": "Enable IP restriction when creating API and add the following IPs",
+    "ip_whitelist_title": "IP Whitelist Information",
+    "ip_whitelist_description": "When creating your exchange API key, you must add these IP addresses to the whitelist for security:",
+    "ip_whitelist_instruction": "Add these IPs in your exchange account: API settings > IP restriction section",
+    "copy_ip": "Copy",
+    "copied": "Copied!",
     "connect": "Connect Exchange",
     "fill_all_fields": "Please fill in all fields",
     "connected_successfully": "Exchange connected successfully",

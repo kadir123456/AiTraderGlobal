@@ -1,7 +1,18 @@
 import axios from 'axios';
 
 // API Base URL - update this with your Render backend URL in production
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const LS_OVERRIDE_KEY = 'api_base_url_override';
+const overrideBase = typeof window !== 'undefined' ? localStorage.getItem(LS_OVERRIDE_KEY) : null;
+const API_BASE_URL = (overrideBase || import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000');
+
+// Debug logging
+console.log('🔧 API Configuration:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_TRADING_API_URL: import.meta.env.VITE_TRADING_API_URL,
+  Override_LocalStorage: overrideBase || 'Not set',
+  Final_API_BASE_URL: API_BASE_URL,
+  Mode: import.meta.env.MODE,
+});
 
 // Create axios instance
 const api = axios.create({
@@ -25,8 +36,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token');
-      window.location.href = '/auth';
+      console.error('🔒 401 Unauthorized:', {
+        url: error.config?.url,
+        hasToken: !!localStorage.getItem('auth_token'),
+        tokenPreview: localStorage.getItem('auth_token')?.substring(0, 20) + '...',
+        errorDetail: error.response?.data
+      });
     }
     return Promise.reject(error);
   }
