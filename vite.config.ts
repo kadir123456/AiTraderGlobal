@@ -8,9 +8,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    preview: {
-      allowedHosts: ["aitraderglobal.onrender.com"], // ✅ Render domain eklendi
-    },
+  },
+  preview: {
+    host: "::",
+    port: 8080,
+    allowedHosts: ["aitraderglobal.onrender.com"],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
