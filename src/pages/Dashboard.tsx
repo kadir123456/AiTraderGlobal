@@ -156,8 +156,6 @@ const Dashboard = () => {
         <div className="mb-6">
           <APIHealthCheck />
         </div>
-
-<<<<<<< HEAD
         {/* How to Use */}
         <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
           <CardHeader>
@@ -177,7 +175,6 @@ const Dashboard = () => {
               <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>
                 {t('dashboard.go_to_trading')}
               </Button>
-=======
         {/* Nasıl Kullanılır */}
         <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
           <CardHeader>
@@ -193,7 +190,6 @@ const Dashboard = () => {
             <div className="mt-4 flex gap-3">
               <Button size="sm" onClick={() => navigate('/settings')}>Ayarlar</Button>
               <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>Trading’e Git</Button>
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
             </div>
           </CardContent>
         </Card>
