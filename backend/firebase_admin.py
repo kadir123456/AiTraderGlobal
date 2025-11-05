@@ -165,3 +165,128 @@ def verify_firebase_token(token: str) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Token verification error: {e}")
         return None
+
+# Auto Trading Settings Management
+def get_auto_trading_settings(user_id: str) -> Optional[Dict]:
+    """Get user's auto-trading settings from Firebase"""
+    if not firebase_initialized:
+        logger.warning("Firebase not initialized")
+        return None
+    
+    try:
+        ref = db.reference(f'users/{user_id}/auto_trading')
+        settings = ref.get()
+        
+        if settings:
+            logger.info(f"Auto-trading settings retrieved for user: {user_id}")
+            return settings
+        else:
+            # Return default settings
+            logger.info(f"No auto-trading settings found, returning defaults")
+            return {
+                "enabled": False,
+                "watchlist": ["BTCUSDT", "ETHUSDT"],
+                "interval": "15m",
+                "default_amount": 10,
+                "default_leverage": 10,
+                "default_tp": 5,
+                "default_sl": 2,
+                "exchange": "binance"
+            }
+    except Exception as e:
+        logger.error(f"Error getting auto-trading settings: {e}")
+        return None
+
+def save_auto_trading_settings(user_id: str, settings: Dict) -> bool:
+    """Save user's auto-trading settings to Firebase"""
+    if not firebase_initialized:
+        logger.warning("Firebase not initialized")
+        return False
+    
+    try:
+        ref = db.reference(f'users/{user_id}/auto_trading')
+        ref.set({
+            "enabled": settings.get("enabled", False),
+            "watchlist": settings.get("watchlist", []),
+            "interval": settings.get("interval", "15m"),
+            "default_amount": settings.get("default_amount", 10),
+            "default_leverage": settings.get("default_leverage", 10),
+            "default_tp": settings.get("default_tp", 5),
+            "default_sl": settings.get("default_sl", 2),
+            "exchange": settings.get("exchange", "binance"),
+            "updated_at": int(time.time())
+        })
+        logger.info(f"Auto-trading settings saved for user: {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving auto-trading settings: {e}")
+        return False
+
+def save_ema_signal(user_id: str, signal: Dict) -> bool:
+    """Save EMA signal to Firebase"""
+    if not firebase_initialized:
+        logger.warning("Firebase not initialized")
+        return False
+    
+    try:
+        ref = db.reference('signals')
+        new_signal_ref = ref.push({
+            "user_id": user_id,
+            "symbol": signal.get("symbol"),
+            "signal_type": signal.get("signal_type"),
+            "ema9": signal.get("ema9"),
+            "ema21": signal.get("ema21"),
+            "price": signal.get("price"),
+            "exchange": signal.get("exchange"),
+            "interval": signal.get("interval"),
+            "timestamp": int(time.time()),
+            "action_taken": False
+        })
+        logger.info(f"Signal saved: {new_signal_ref.key}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving signal: {e}")
+        return False
+
+def get_user_signals(user_id: str, limit: int = 50) -> list:
+    """Get user's recent signals"""
+    if not firebase_initialized:
+        logger.warning("Firebase not initialized")
+        return []
+    
+    try:
+        ref = db.reference('signals')
+        signals = ref.order_by_child('user_id').equal_to(user_id).limit_to_last(limit).get()
+        
+        if signals:
+            # Convert to list and sort by timestamp
+            signals_list = []
+            for signal_id, signal_data in signals.items():
+                signal_data['id'] = signal_id
+                signals_list.append(signal_data)
+            
+            signals_list.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+            logger.info(f"Retrieved {len(signals_list)} signals for user: {user_id}")
+            return signals_list
+        return []
+    except Exception as e:
+        logger.error(f"Error getting signals: {e}")
+        return []
+
+def update_signal_action(signal_id: str, action_taken: bool) -> bool:
+    """Update signal action status"""
+    if not firebase_initialized:
+        logger.warning("Firebase not initialized")
+        return False
+    
+    try:
+        ref = db.reference(f'signals/{signal_id}')
+        ref.update({
+            "action_taken": action_taken,
+            "action_timestamp": int(time.time())
+        })
+        logger.info(f"Signal {signal_id} action updated")
+        return True
+    except Exception as e:
+        logger.error(f"Error updating signal action: {e}")
+        return False

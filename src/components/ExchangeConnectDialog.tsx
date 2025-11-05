@@ -30,6 +30,8 @@ const SUPPORTED_EXCHANGES = [
   { id: 'binance', name: 'Binance' },
   { id: 'bybit', name: 'Bybit' },
   { id: 'okx', name: 'OKX' },
+  { id: 'kucoin', name: 'KuCoin' },
+  { id: 'mexc', name: 'MEXC' },
 ];
 
 const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProps) => {
@@ -38,11 +40,17 @@ const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProp
   const [selectedExchange, setSelectedExchange] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
 
   const handleConnect = async () => {
     if (!selectedExchange || !apiKey || !apiSecret) {
       toast.error(t('exchange.fill_all_fields'));
+      return;
+    }
+    
+    if ((selectedExchange === 'kucoin' || selectedExchange === 'okx') && !passphrase) {
+      toast.error(t('exchange.passphrase_required'));
       return;
     }
 
@@ -53,6 +61,7 @@ const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProp
         name: selectedExchange,
         apiKey,
         apiSecret,
+        passphrase,
       });
 
       toast.success(t('exchange.connected_successfully'));
@@ -61,6 +70,7 @@ const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProp
       setSelectedExchange("");
       setApiKey("");
       setApiSecret("");
+      setPassphrase("");
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error connecting exchange:', error);
@@ -121,6 +131,23 @@ const ExchangeConnectDialog = ({ open, onOpenChange }: ExchangeConnectDialogProp
               placeholder={t('exchange.enter_api_secret')}
             />
           </div>
+
+          {/* API Passphrase (for OKX and KuCoin) */}
+          {(selectedExchange === 'okx' || selectedExchange === 'kucoin') && (
+            <div className="space-y-2">
+              <Label htmlFor="passphrase">{t('exchange.api_passphrase')}</Label>
+              <Input
+                id="passphrase"
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder={t('exchange.enter_passphrase')}
+              />
+              <p className="text-xs text-muted-foreground">
+                {selectedExchange === 'okx' ? 'OKX' : 'KuCoin'} requires an API passphrase
+              </p>
+            </div>
+          )}
 
           {/* Security Notice */}
           <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground">

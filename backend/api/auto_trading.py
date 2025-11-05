@@ -48,29 +48,45 @@ async def update_auto_trading_settings(
 ):
     """Update user's auto-trading settings"""
     try:
+        from backend.firebase_admin import save_auto_trading_settings, get_user_api_keys
+        
         user_id = current_user.get('user_id') or current_user.get('id')
         
-        # Store settings in database
-        # Implementation depends on your database structure
+        # Validate exchange API keys exist
+        if settings.enabled:
+            api_keys = get_user_api_keys(user_id, settings.exchange)
+            if not api_keys:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Please add {settings.exchange} API keys before enabling auto-trading"
+                )
+        
+        # Save settings to Firebase
+        saved = save_auto_trading_settings(user_id, settings.dict())
+        if not saved:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to save auto-trading settings"
+            )
         
         # Start or stop monitoring based on enabled flag
-        if settings.enabled:
-            # Get user's exchange API keys
-            # Implementation needed
-            
-            # Start monitoring
+        if settings.enabled and EMA_MONITOR_AVAILABLE:
             if ema_monitor:
                 await ema_monitor.start_monitoring_user(user_id, settings.dict())
+                logger.info(f"Started auto-trading for user {user_id}")
         else:
             if ema_monitor:
                 await ema_monitor.stop_monitoring_user(user_id)
+                logger.info(f"Stopped auto-trading for user {user_id}")
         
         return {
             "success": True,
-            "message": "Auto-trading settings updated",
+            "message": "Auto-trading settings updated successfully",
             "enabled": settings.enabled
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating auto-trading settings: {e}")
         raise HTTPException(
@@ -84,22 +100,22 @@ async def get_auto_trading_settings(
 ):
     """Get user's auto-trading settings"""
     try:
+        from backend.firebase_admin import get_auto_trading_settings
+        
         user_id = current_user.get('user_id') or current_user.get('id')
         
-        # Get settings from database
-        # Implementation needed
+        # Get settings from Firebase
+        settings = get_auto_trading_settings(user_id)
+        if not settings:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve auto-trading settings"
+            )
         
-        return {
-            "enabled": False,
-            "watchlist": ["BTCUSDT", "ETHUSDT"],
-            "interval": "15m",
-            "default_amount": 10,
-            "default_leverage": 10,
-            "default_tp": 5,
-            "default_sl": 2,
-            "exchange": "binance"
-        }
+        return settings
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting auto-trading settings: {e}")
         raise HTTPException(
@@ -139,13 +155,16 @@ async def get_signals_history(
 ):
     """Get signal history"""
     try:
+        from backend.firebase_admin import get_user_signals
+        
         user_id = current_user.get('user_id') or current_user.get('id')
         
-        # Get from database
-        # Implementation needed
+        # Get signals from Firebase
+        signals = get_user_signals(user_id, limit)
         
         return {
-            "signals": []
+            "signals": signals,
+            "count": len(signals)
         }
         
     except Exception as e:

@@ -52,8 +52,13 @@ export const authAPI = {
 
 // Exchange API Keys
 export const exchangeAPI = {
-  addApiKey: (exchange: string, apiKey: string, apiSecret: string) =>
-    api.post('/api/user/api-keys', { exchange, api_key: apiKey, api_secret: apiSecret }),
+  addApiKey: (exchange: string, apiKey: string, apiSecret: string, passphrase?: string) =>
+    api.post('/api/user/api-keys', { 
+      exchange, 
+      api_key: apiKey, 
+      api_secret: apiSecret,
+      ...(passphrase && { passphrase })
+    }),
   
   getApiKeys: () => api.get('/api/user/api-keys'),
   

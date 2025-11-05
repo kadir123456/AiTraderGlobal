@@ -15,6 +15,7 @@ interface AddExchangeParams {
   name: string;
   apiKey: string;
   apiSecret: string;
+  passphrase?: string;
 }
 
 export const useExchanges = () => {
@@ -48,9 +49,9 @@ export const useExchanges = () => {
     fetchExchanges();
   }, [user]);
 
-  const addExchange = async ({ name, apiKey, apiSecret }: AddExchangeParams) => {
+  const addExchange = async ({ name, apiKey, apiSecret, passphrase }: AddExchangeParams) => {
     if (!user) throw new Error('User not authenticated');
-    await exchangeAPI.addApiKey(name, apiKey, apiSecret);
+    await exchangeAPI.addApiKey(name, apiKey, apiSecret, passphrase);
     const response = await exchangeAPI.getApiKeys();
     setExchanges(response.data.exchanges || []);
     return { success: true };

@@ -19,7 +19,8 @@ services:
   - type: web
     name: ema-navigator-frontend
     env: node
-    buildCommand: npm install && npm run build
+    rootDir: .
+    buildCommand: rm -rf node_modules dist && npm install && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL

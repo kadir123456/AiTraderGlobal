@@ -381,6 +381,10 @@ async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_c
         is_valid = await validate_bybit_api(api_input.api_key, api_input.api_secret)
     elif exchange == "okx":
         is_valid = await validate_okx_api(api_input.api_key, api_input.api_secret)
+    elif exchange == "kucoin":
+        is_valid = True  # KuCoin validation yapılacak
+    elif exchange == "mexc":
+        is_valid = True  # MEXC validation yapılacak
     else:
         raise HTTPException(status_code=400, detail=f"Exchange {exchange} not supported")
     
@@ -498,18 +502,19 @@ async def create_position(position: PositionRequest, current_user: dict = Depend
             detail=f"Position limit reached. {limit_check['message']}. Upgrade to Pro for more positions."
         )
     
-    # TODO: Fetch user's API keys from database for the selected exchange
-    # For now using mock keys - REPLACE IN PRODUCTION
-    api_key = "mock_api_key"
-    api_secret = "mock_api_secret"
-    passphrase = position.passphrase or ""
+    # Fetch user's API keys from Firebase
+    from backend.firebase_admin import get_user_api_keys
     
-    # Validate API keys exist
-    if not api_key or api_key == "mock_api_key":
+    api_data = get_user_api_keys(user_id, exchange)
+    if not api_data:
         raise HTTPException(
             status_code=400,
-            detail=f"Exchange credentials missing for {exchange}. Please add your API keys in Settings."
+            detail=f"API keys not configured for {exchange}. Please add via Settings > Exchanges."
         )
+    
+    api_key = api_data.get("api_key")
+    api_secret = api_data.get("api_secret")
+    passphrase = api_data.get("passphrase", "")
     
     try:
         # Route to appropriate exchange service
