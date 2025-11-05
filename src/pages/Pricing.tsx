@@ -64,8 +64,8 @@ const Pricing = () => {
       highlighted: true,
     },
     {
-      id: 'premium',
-      name: 'Premium',
+      id: 'enterprise',
+      name: 'Enterprise',
       icon: Crown,
       price: { monthly: 299, yearly: 2990 }, // ~17% discount yearly
       description: 'Profesyoneller ve kurumlar için',
@@ -83,7 +83,7 @@ const Pricing = () => {
         { text: 'Training & consulting', included: true },
         { text: 'Özel özellik talepleri', included: true },
       ],
-      cta: 'Premium\'a Geç',
+      cta: 'Enterprise\'a Geç',
       highlighted: false,
     },
   ];
