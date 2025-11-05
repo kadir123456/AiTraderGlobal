@@ -76,7 +76,7 @@ const ExchangeList = () => {
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {t('exchange.added')}: {new Date(exchange.addedAt).toLocaleDateString()}
+                    {t('exchange.added')}: {exchange.addedAt ? new Date(exchange.addedAt).toLocaleDateString() : 'N/A'}
                   </div>
                   {exchange.lastChecked && (
                     <div className="text-xs text-muted-foreground">
