@@ -2,7 +2,7 @@
 LemonSqueezy Payment Integration
 Handles subscription webhooks and plan management
 """
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 import hmac
