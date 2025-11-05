@@ -1,7 +1,8 @@
-# Exchange Balance Endpoint
+# Exchange Balance Endpoint - Firebase Version
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 from backend.main import get_current_user
+from backend.firebase_admin import get_user_api_keys
 
 router = APIRouter()
 
@@ -15,12 +16,17 @@ async def get_exchange_balance(
     try:
         from backend.services import binance_service, bybit_service, okx_service, kucoin_service, mexc_service
         
-        # TODO: Fetch user's API keys from database
-        api_key = "mock_api_key"
-        api_secret = "mock_api_secret"
-        passphrase = ""
-        
+        # Fetch user's API keys from Firebase
+        user_id = current_user.get("user_id")
         exchange = exchange.lower()
+        
+        api_keys = get_user_api_keys(user_id, exchange)
+        if not api_keys:
+            raise HTTPException(status_code=400, detail=f"API keys not configured for {exchange}. Please add via Settings.")
+        
+        api_key = api_keys.get("api_key")
+        api_secret = api_keys.get("api_secret")
+        passphrase = api_keys.get("passphrase", "")
         
         if exchange == "binance":
             balance = await binance_service.get_balance(api_key, api_secret, is_futures)
@@ -40,5 +46,7 @@ async def get_exchange_balance(
         
         return balance
         
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch balance: {str(e)}")

@@ -118,6 +118,8 @@ class APIKeyInput(BaseModel):
     exchange: str
     api_key: str
     api_secret: str
+    passphrase: Optional[str] = None
+    is_futures: bool = True
 
 class EMARequest(BaseModel):
     exchange: str
@@ -366,7 +368,9 @@ async def login(user: UserLogin):
 # API Key Management
 @app.post("/api/user/api-keys")
 async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_current_user)):
-    """Add and validate exchange API key"""
+    """Add and validate exchange API key - Firebase Version"""
+    from backend.firebase_admin import save_user_api_keys
+    
     exchange = api_input.exchange.lower()
     
     # Validate API credentials
@@ -383,33 +387,38 @@ async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_c
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid API credentials")
     
-    # TODO: Store encrypted API keys in database
+    # Save to Firebase
+    saved = save_user_api_keys(
+        user_id=current_user.get("user_id"),
+        exchange=exchange,
+        api_key=api_input.api_key,
+        api_secret=api_input.api_secret,
+        passphrase=api_input.passphrase or "",
+        is_futures=api_input.is_futures
+    )
+    
     return {
         "message": f"{exchange.capitalize()} API key validated and stored successfully",
         "exchange": exchange,
-        "status": "connected"
+        "status": "connected",
+        "saved": saved
     }
 
 @app.get("/api/user/api-keys")
 async def get_api_keys(current_user: dict = Depends(get_current_user)):
-    """Get user's connected exchanges"""
-    # TODO: Fetch from database
-    return {
-        "exchanges": [
-            {
-                "id": "1",
-                "name": "binance",
-                "status": "connected",
-                "added_at": datetime.utcnow().isoformat()
-            }
-        ]
-    }
+    """Get user's connected exchanges - Firebase Version"""
+    from backend.firebase_admin import get_all_user_exchanges
+    
+    exchanges = get_all_user_exchanges(current_user.get("user_id"))
+    return {"exchanges": exchanges}
 
 @app.delete("/api/user/api-keys/{exchange_id}")
 async def remove_api_key(exchange_id: str, current_user: dict = Depends(get_current_user)):
-    """Remove exchange API key"""
-    # TODO: Delete from database
-    return {"message": "Exchange removed successfully"}
+    """Remove exchange API key - Firebase Version"""
+    from backend.firebase_admin import delete_user_api_keys
+    
+    deleted = delete_user_api_keys(current_user.get("user_id"), exchange_id)
+    return {"message": "Exchange removed successfully", "deleted": deleted}
 
 # Bot/Trading Endpoints
 @app.post("/api/bot/ema-signal")

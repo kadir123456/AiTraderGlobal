@@ -11,18 +11,20 @@ logger = logging.getLogger(__name__)
 async def lifespan(app):
     """
     Lifespan context manager for FastAPI app
-    Handles startup and shutdown events
+    Handles startup and shutdown events - Firebase Version
     """
     # Startup
     logger.info("🚀 Starting EMA Navigator AI Trading API...")
     
-    # Initialize database
+    # Initialize Firebase
     try:
-        from backend.database import db
-        await db.init_db()
-        logger.info("✅ Database initialized")
+        from backend.firebase_admin import firebase_initialized
+        if firebase_initialized:
+            logger.info("✅ Firebase initialized")
+        else:
+            logger.warning("⚠️ Firebase not initialized - check FIREBASE_CREDENTIALS_JSON and FIREBASE_DATABASE_URL")
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {str(e)}")
+        logger.error(f"❌ Firebase initialization failed: {str(e)}")
     
     # Initialize EMA monitor (if available)
     try:
@@ -38,12 +40,4 @@ async def lifespan(app):
     
     # Shutdown
     logger.info("🛑 Shutting down EMA Navigator AI Trading API...")
-    
-    try:
-        from backend.database import db
-        await db.close_db()
-        logger.info("✅ Database connections closed")
-    except Exception as e:
-        logger.error(f"❌ Error closing database: {str(e)}")
-    
     logger.info("✅ Application shutdown complete!")
