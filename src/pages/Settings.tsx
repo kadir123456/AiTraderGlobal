@@ -78,20 +78,46 @@ const Settings = () => {
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="exchanges" className="w-full">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-8 h-auto">
-            <TabsTrigger value="exchanges" className="whitespace-normal text-xs sm:text-sm">{t('settings.exchanges')}</TabsTrigger>
-            <TabsTrigger value="trading" className="whitespace-normal text-xs sm:text-sm">{t('settings.trading')}</TabsTrigger>
-            <TabsTrigger value="auto-trading" className="whitespace-normal text-xs sm:text-sm">Auto Trading</TabsTrigger>
-            <TabsTrigger value="subscription" className="whitespace-normal text-xs sm:text-sm">{t('settings.subscription')}</TabsTrigger>
-            <TabsTrigger value="profile" className="whitespace-normal text-xs sm:text-sm">{t('settings.profile')}</TabsTrigger>
+            <TabsTrigger value="exchanges" className="whitespace-normal text-xs sm:text-sm">
+              🏦 Borsalar
+            </TabsTrigger>
+            <TabsTrigger value="trading" className="whitespace-normal text-xs sm:text-sm">
+              📊 Manuel İşlem Ayarları
+            </TabsTrigger>
+            <TabsTrigger value="auto-trading" className="whitespace-normal text-xs sm:text-sm">
+              🤖 Otomatik Al-Sat
+            </TabsTrigger>
+            <TabsTrigger value="subscription" className="whitespace-normal text-xs sm:text-sm">
+              💎 Abonelik Paketim
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="whitespace-normal text-xs sm:text-sm">
+              👤 Profil Bilgilerim
+            </TabsTrigger>
           </TabsList>
 
           {/* Exchanges Tab */}
           <TabsContent value="exchanges" className="space-y-6">
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">🏦 Borsa Bağlantılarım</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Binance, Bybit, OKX, KuCoin ve MEXC borsalarınızı buradan bağlayabilirsiniz.
+                    API Key ve Secret'inizi girerek borsalarınızı sisteme tanıtın.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ⚠️ API Key oluştururken "Withdrawal" (Para Çekme) iznini <strong>kapatın</strong>. 
+                    Sadece "Read" ve "Trade" izinleri yeterlidir.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <IPWhitelistCard />
             
             <Card>
               <CardHeader>
-                <CardTitle>{t('settings.exchange_connections')}</CardTitle>
+                <CardTitle>Bağlı Borsalarım</CardTitle>
               </CardHeader>
               <CardContent>
                 <ExchangeList />
@@ -101,9 +127,21 @@ const Settings = () => {
 
           {/* Trading Settings Tab */}
           <TabsContent value="trading">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">📊 Manuel İşlem Ayarları</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Trading sayfasında manuel olarak pozisyon açarken kullanılacak varsayılan değerlerinizi buradan ayarlayın.
+                    Her işlemde bu değerleri değiştirebilirsiniz.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>{t('settings.trading_parameters')}</CardTitle>
+                <CardTitle>Varsayılan İşlem Parametreleri</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -168,14 +206,41 @@ const Settings = () => {
 
           {/* Auto Trading Tab */}
           <TabsContent value="auto-trading">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">🤖 Otomatik Al-Sat Sistemi</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Bot'u aktif ederek EMA (9/21) stratejisine göre otomatik işlem açabilirsiniz.
+                    Bot belirlediğiniz coin'leri takip eder ve sinyal geldiğinde otomatik pozisyon açar.
+                  </p>
+                  <p className="text-xs text-destructive mt-2">
+                    ⚠️ Otomatik işlem yapmadan önce stratejinizi ve risk yönetiminizi iyi ayarlayın.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            
             <AutoTradingToggle />
           </TabsContent>
 
           {/* Subscription Tab */}
           <TabsContent value="subscription">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">💎 Mevcut Paketim</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Şu anda kullandığınız paket bilgileri ve özellikleri burada görünür.
+                    Daha fazla özellik için paketinizi yükseltebilirsiniz.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>{t('settings.subscription_details')}</CardTitle>
+                <CardTitle>Abonelik Detayları</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
@@ -211,9 +276,20 @@ const Settings = () => {
 
           {/* Profile Tab */}
           <TabsContent value="profile">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">👤 Profil Bilgilerim</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Hesap bilgileriniz ve dil ayarlarınız burada görünür.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>{t('settings.profile_settings')}</CardTitle>
+                <CardTitle>Hesap Bilgileri</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">

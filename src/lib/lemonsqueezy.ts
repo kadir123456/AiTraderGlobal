@@ -1,6 +1,17 @@
 // LemonSqueezy Payment Integration
 // Documentation: https://docs.lemonsqueezy.com/
 
+// Configuration - Update these with your actual values
+const LEMONSQUEEZY_CONFIG = {
+  storeId: '239668',
+  apiUrl: 'https://aitraderglobal.onrender.com',
+  variantIds: {
+    free: '',
+    pro: '1075011',
+    enterprise: '1075030',
+  },
+};
+
 export interface LemonSqueezyConfig {
   storeId: string;
   variantIds: {
@@ -57,20 +68,14 @@ export const initializeLemonSqueezy = (): Promise<void> => {
 
 // Open checkout for a plan
 export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
-  const storeId = import.meta.env.VITE_LEMONSQUEEZY_STORE_ID;
+  const storeId = LEMONSQUEEZY_CONFIG.storeId;
   
   if (!storeId) {
-    throw new Error('LemonSqueezy store ID not configured. Please add VITE_LEMONSQUEEZY_STORE_ID to environment variables.');
+    throw new Error('LemonSqueezy store ID not configured.');
   }
 
   // Get variant ID for the plan
-  const variantIds = {
-    free: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_FREE || '',
-    pro: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_PRO || '',
-    enterprise: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_ENTERPRISE || '',
-  };
-
-  const variantId = variantIds[options.planId];
+  const variantId = LEMONSQUEEZY_CONFIG.variantIds[options.planId];
 
   if (!variantId) {
     throw new Error(`Variant ID not configured for ${options.planId} plan`);
@@ -98,13 +103,7 @@ const handleCheckoutSuccess = () => {
 
 // Generate checkout URL (for direct links)
 export const getCheckoutUrl = (planId: 'free' | 'pro' | 'enterprise', email: string, name: string): string => {
-  const variantIds = {
-    free: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_FREE || '',
-    pro: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_PRO || '',
-    enterprise: import.meta.env.VITE_LEMONSQUEEZY_VARIANT_ID_ENTERPRISE || '',
-  };
-
-  const variantId = variantIds[planId];
+  const variantId = LEMONSQUEEZY_CONFIG.variantIds[planId];
   
   if (!variantId) {
     console.error(`Variant ID not configured for ${planId} plan`);

@@ -3,11 +3,15 @@ Auto Trading API Endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 import logging
 
 from backend.auth import get_current_user
+
+if TYPE_CHECKING:
+    from backend.services.ema_monitor import EMAMonitor
+
 try:
     from backend.services.ema_monitor import EMAMonitor
     EMA_MONITOR_AVAILABLE = True
@@ -19,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auto-trading", tags=["auto-trading"])
 
 # Global monitor instance
-ema_monitor: Optional[EMAMonitor] = None
+ema_monitor: Optional[Any] = None
 
 class AutoTradingSettings(BaseModel):
     enabled: bool
@@ -44,7 +48,7 @@ async def update_auto_trading_settings(
 ):
     """Update user's auto-trading settings"""
     try:
-        user_id = current_user['id']
+        user_id = current_user.get('user_id') or current_user.get('id')
         
         # Store settings in database
         # Implementation depends on your database structure
@@ -80,7 +84,7 @@ async def get_auto_trading_settings(
 ):
     """Get user's auto-trading settings"""
     try:
-        user_id = current_user['id']
+        user_id = current_user.get('user_id') or current_user.get('id')
         
         # Get settings from database
         # Implementation needed
@@ -109,7 +113,7 @@ async def get_auto_trading_status(
 ) -> AutoTradingStatus:
     """Get auto-trading status"""
     try:
-        user_id = current_user['id']
+        user_id = current_user.get('user_id') or current_user.get('id')
         
         # Get status from monitor
         # Implementation needed
@@ -135,7 +139,7 @@ async def get_signals_history(
 ):
     """Get signal history"""
     try:
-        user_id = current_user['id']
+        user_id = current_user.get('user_id') or current_user.get('id')
         
         # Get from database
         # Implementation needed

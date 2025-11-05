@@ -1,7 +1,7 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu, Shield } from "lucide-react";
+import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu, Shield, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -10,12 +10,16 @@ import { CurrencyToggle } from "@/components/CurrencyToggle";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { StatsCard } from "@/components/StatsCard";
 import { PositionCard } from "@/components/PositionCard";
+import { TransactionHistoryTable } from "@/components/TransactionHistoryTable";
 import { useAdmin } from "@/hooks/useAdmin";
-
 import { useTrading } from "@/hooks/useTrading";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useExchanges } from "@/hooks/useExchanges";
+import { useBalance } from "@/hooks/useBalance";
+import { BalanceCard } from "@/components/BalanceCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -32,6 +36,11 @@ const Dashboard = () => {
   }, [user, authLoading, navigate]);
   const { positions, loading: positionsLoading, refreshPositions } = useTrading();
   const { plan, loading: planLoading } = useSubscription();
+  const { exchanges, loading: exchangesLoading } = useExchanges();
+  const [accountType, setAccountType] = useState<'spot' | 'futures'>('futures');
+  
+  const exchangeNames = exchanges.map(ex => ex.name);
+  const { balances, loading: balancesLoading, refreshBalances } = useBalance(exchangeNames, accountType === 'futures');
 
   // Auto-refresh positions every 30 seconds
   useEffect(() => {
@@ -226,6 +235,60 @@ const Dashboard = () => {
           )}
         </div>
 
+        {/* Exchange Balances */}
+        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-primary" />
+                <CardTitle className="text-xl">Borsa Bakiyeleri</CardTitle>
+              </div>
+              <div className="flex items-center gap-3">
+                <Tabs value={accountType} onValueChange={(v) => setAccountType(v as 'spot' | 'futures')} className="w-auto">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="spot">Spot</TabsTrigger>
+                    <TabsTrigger value="futures">Futures</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => refreshBalances()}
+                  disabled={balancesLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${balancesLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {exchangesLoading || balancesLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array(3).fill(0).map((_, i) => (
+                  <Skeleton key={i} className="h-40 w-full" />
+                ))}
+              </div>
+            ) : exchanges.length === 0 ? (
+              <div className="text-center py-8">
+                <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-lg font-medium mb-2">Bağlı Borsa Yok</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Bakiyelerinizi görmek için önce bir borsa bağlayın
+                </p>
+                <Button onClick={() => navigate('/settings')}>
+                  Borsa Bağla
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {balances.map((balance) => (
+                  <BalanceCard key={`${balance.exchange}-${balance.type}`} {...balance} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Open Positions */}
         <Card className="border-border bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -266,6 +329,11 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Transaction History */}
+        <div className="mt-8">
+          <TransactionHistoryTable />
+        </div>
       </main>
     </div>
   );

@@ -1,19 +1,6 @@
 import axios from 'axios';
 
-// API config (clean) - ensure no merge markers are present
-// API Base URL - update this with your Render backend URL in production
-const LS_OVERRIDE_KEY = 'api_base_url_override';
-const overrideBase = typeof window !== 'undefined' ? localStorage.getItem(LS_OVERRIDE_KEY) : null;
-const API_BASE_URL = (overrideBase || import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000');
-
-// Debug logging
-console.log('🔧 API Configuration:', {
-  VITE_API_URL: import.meta.env.VITE_API_URL,
-  VITE_TRADING_API_URL: import.meta.env.VITE_TRADING_API_URL,
-  Override_LocalStorage: overrideBase || 'Not set',
-  Final_API_BASE_URL: API_BASE_URL,
-  Mode: import.meta.env.MODE,
-});
+const API_BASE_URL = 'https://aitraderglobal.onrender.com';
 
 // Create axios instance
 const api = axios.create({
@@ -21,6 +8,12 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Debug logging
+console.log('🔧 API Configuration:', {
+  Final_API_BASE_URL: API_BASE_URL,
+  Mode: import.meta.env.MODE,
 });
 
 // Add auth token to requests

@@ -73,10 +73,20 @@ try:
 except ImportError:
     print("⚠️ Warning: Admin module not available")
 
+# Include transactions router
+try:
+    from backend.api.transactions import router as transactions_router
+    app.include_router(transactions_router)
+    print("✅ Transactions module loaded")
+except ImportError:
+    print("⚠️ Warning: Transactions module not available")
+
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://aitraderglobal.com",
+        "https://www.aitraderglobal.com",
         "https://aitraderglobal-1.onrender.com",
         "https://aitraderglobal.onrender.com",
         "https://aitraderglobal-1.lovable.app",

@@ -2,7 +2,7 @@
 LemonSqueezy Payment Integration
 Handles subscription webhooks and plan management
 """
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 import hmac
@@ -195,17 +195,10 @@ async def handle_subscription_expired(payload: dict):
         logger.error(f"Error handling subscription_expired: {str(e)}")
 
 def get_plan_from_variant(variant_id: str) -> str:
-    """
-    Map LemonSqueezy variant ID to plan name
-    
-    TODO: Replace with your actual variant IDs from LemonSqueezy
-    """
+    """Map LemonSqueezy variant ID to plan name"""
     variant_map = {
-        # Example IDs - replace with real ones
-        "123456": "pro",      # Pro Monthly
-        "123457": "pro",      # Pro Yearly
-        "123458": "premium",  # Premium Monthly
-        "123459": "premium",  # Premium Yearly
+        "1075011": "pro",        # Pro Monthly (999 TRY / 29.99 USD)
+        "1075030": "enterprise",  # Enterprise Monthly (3499 TRY / 99.99 USD)
     }
     
     return variant_map.get(str(variant_id), "free")

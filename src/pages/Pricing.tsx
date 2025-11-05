@@ -105,12 +105,18 @@ const Pricing = () => {
       return;
     }
 
-    // TODO: LemonSqueezy checkout URL'ini açacağız
-    toast.info('Ödeme sistemi yakında aktif olacak. Admin panelinden plan değişikliği yapabilirsiniz.');
-    
-    // LemonSqueezy checkout yapılacak:
-    // const checkoutUrl = `https://your-store.lemonsqueezy.com/checkout/buy/${variantId}?checkout[email]=${user.email}&checkout[custom][user_id]=${user.uid}`;
-    // window.location.href = checkoutUrl;
+    try {
+      const { openCheckout } = await import('@/lib/lemonsqueezy');
+      
+      await openCheckout({
+        planId: planId as 'free' | 'pro' | 'enterprise',
+        email: user.email || '',
+        name: user.displayName || user.email || 'User',
+      });
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast.error('Ödeme sayfası açılamadı. Lütfen tekrar deneyin.');
+    }
   };
 
   return (
