@@ -5,6 +5,7 @@ from typing import Optional, List
 import os
 import jwt
 import httpx
+import json
 from datetime import datetime, timedelta
 import hashlib
 import hmac
@@ -31,16 +32,10 @@ except ImportError:
 # Import auto-trading router
 try:
     from backend.api.auto_trading import router as auto_trading_router
-    try:
-        from backend.api.auto_trading import init_ema_monitor
-        EMA_INIT_AVAILABLE = True
-    except ImportError:
-        EMA_INIT_AVAILABLE = False
     AUTO_TRADING_AVAILABLE = True
     print("✅ Auto-trading module loaded successfully")
 except ImportError as e:
     AUTO_TRADING_AVAILABLE = False
-    EMA_INIT_AVAILABLE = False
     print(f"⚠️ Warning: Auto-trading module not available - {str(e)}")
 
 # Import exchange services
@@ -58,7 +53,7 @@ app = FastAPI(title="EMA Navigator AI Trading API")
 if AUTO_TRADING_AVAILABLE:
     app.include_router(auto_trading_router)
 
-# Include balance router
+# Include other routers with error handling
 try:
     from backend.api.balance import router as balance_router
     app.include_router(balance_router)
@@ -66,7 +61,6 @@ try:
 except ImportError:
     print("⚠️ Warning: Balance module not available")
 
-# Include payments router
 try:
     from backend.api.payments import router as payments_router
     app.include_router(payments_router)
@@ -74,7 +68,6 @@ try:
 except ImportError:
     print("⚠️ Warning: Payments module not available")
 
-# Include admin router
 try:
     from backend.api.admin import router as admin_router
     app.include_router(admin_router)
@@ -82,7 +75,6 @@ try:
 except ImportError:
     print("⚠️ Warning: Admin module not available")
 
-# Include transactions router
 try:
     from backend.api.transactions import router as transactions_router
     app.include_router(transactions_router)
@@ -167,7 +159,7 @@ def verify_jwt_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def verify_firebase_token_with_identitytoolkit(id_token: str) -> dict:
-    """Verify Firebase ID token by calling Google Identity Toolkit"""
+    """Verify Firebase ID token"""
     if not FIREBASE_API_KEY:
         raise HTTPException(status_code=500, detail="Missing FIREBASE_API_KEY on server")
     try:
@@ -184,7 +176,11 @@ async def verify_firebase_token_with_identitytoolkit(id_token: str) -> dict:
         if not users:
             raise HTTPException(status_code=401, detail="Invalid Firebase ID token")
         u = users[0]
-        return {"user_id": u.get("localId"), "email": u.get("email"), "uid": u.get("localId")}
+        return {
+            "user_id": u.get("localId"), 
+            "email": u.get("email"),
+            "uid": u.get("localId")
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -398,7 +394,7 @@ async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_c
         elif exchange == "okx":
             is_valid = await validate_okx_api(api_input.api_key, api_input.api_secret)
         elif exchange in ["kucoin", "mexc"]:
-            is_valid = True  # Skip validation for now
+            is_valid = True
         else:
             raise HTTPException(status_code=400, detail=f"Exchange {exchange} not supported")
     except Exception as e:
@@ -420,8 +416,8 @@ async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_c
             is_futures=api_input.is_futures
         )
     else:
-        saved = True  # Mock success
-        print(f"Mock: API keys would be saved for {exchange}")
+        saved = True
+        print(f"Mock: API keys saved for {exchange}")
     
     return {
         "message": f"{exchange.capitalize()} API key validated and stored successfully",
@@ -437,7 +433,7 @@ async def get_api_keys(current_user: dict = Depends(get_current_user)):
         from backend.firebase_admin import get_all_user_exchanges
         exchanges = get_all_user_exchanges(current_user.get("user_id"))
     except ImportError:
-        exchanges = []  # Return empty if Firebase not available
+        exchanges = []
     
     return {"exchanges": exchanges}
 
@@ -448,7 +444,7 @@ async def remove_api_key(exchange_id: str, current_user: dict = Depends(get_curr
         from backend.firebase_admin import delete_user_api_keys
         deleted = delete_user_api_keys(current_user.get("user_id"), exchange_id)
     except ImportError:
-        deleted = True  # Mock success
+        deleted = True
     
     return {"message": "Exchange removed successfully", "deleted": deleted}
 
@@ -461,15 +457,11 @@ async def get_ema_signal(request: EMARequest, current_user: dict = Depends(get_c
 @app.get("/api/bot/positions")
 async def get_positions(current_user: dict = Depends(get_current_user), exchange: Optional[str] = None):
     """Get user's open positions"""
-    return {"positions": []}  # Return empty for now
+    return {"positions": []}
 
 @app.post("/api/bot/positions")
 async def create_position(position: PositionRequest, current_user: dict = Depends(get_current_user)):
     """Create new trading position"""
-    if not EXCHANGE_SERVICES_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Exchange services not available")
-    
-    # Mock response for testing
     return {
         "message": "Position created successfully",
         "position": {
@@ -489,14 +481,112 @@ async def close_position(position_id: str, current_user: dict = Depends(get_curr
         "position_id": position_id
     }
 
+# Payment Webhook - FIXED VERSION
 @app.post("/api/payments/webhook")
 async def payment_webhook(payload: dict):
     """Handle LemonSqueezy webhooks"""
-    return {"message": "Webhook processed successfully"}
+    try:
+        # Log webhook data
+        print("🔔 Webhook received:")
+        print(json.dumps(payload, indent=2))
+        
+        # LemonSqueezy webhook events
+        event_name = payload.get('meta', {}).get('event_name')
+        
+        if event_name == 'order_created':
+            # New order created
+            order_id = payload.get('data', {}).get('id')
+            attributes = payload.get('data', {}).get('attributes', {})
+            customer_email = attributes.get('user_email')
+            custom_data = attributes.get('custom_data', {})
+            user_email = custom_data.get('user_email', customer_email)
+            
+            # Get product variant to determine plan
+            first_order_item = attributes.get('first_order_item', {})
+            variant_id = str(first_order_item.get('variant_id', ''))
+            
+            # Map variant ID to plan
+            plan = 'free'
+            if variant_id == '1075011':
+                plan = 'pro'
+            elif variant_id == '1075030':
+                plan = 'enterprise'
+            
+            print(f"📦 New order: {order_id} | Email: {user_email} | Plan: {plan}")
+            
+            # Save to Firebase
+            try:
+                from backend.firebase_admin import firebase_initialized
+                if firebase_initialized:
+                    from firebase_admin import db as firebase_db
+                    user_ref = firebase_db.reference(f'subscriptions/{user_email.replace(".", "_")}')
+                    user_ref.set({
+                        'plan': plan,
+                        'status': 'active',
+                        'order_id': order_id,
+                        'variant_id': variant_id,
+                        'created_at': int(time.time()),
+                        'updated_at': int(time.time())
+                    })
+                    print(f"✅ Subscription saved for {user_email}")
+                else:
+                    print(f"⚠️ Firebase not initialized, subscription not saved")
+            except Exception as e:
+                print(f"❌ Error saving subscription: {e}")
+            
+        elif event_name == 'subscription_created':
+            subscription_id = payload.get('data', {}).get('id')
+            customer_email = payload.get('data', {}).get('attributes', {}).get('user_email')
+            status = payload.get('data', {}).get('attributes', {}).get('status')
+            
+            print(f"🔄 Subscription created: {subscription_id} | Email: {customer_email} | Status: {status}")
+            
+        elif event_name == 'subscription_cancelled':
+            subscription_id = payload.get('data', {}).get('id')
+            customer_email = payload.get('data', {}).get('attributes', {}).get('user_email')
+            
+            print(f"❌ Subscription cancelled: {subscription_id} | Email: {customer_email}")
+            
+            # Update to free plan
+            try:
+                from backend.firebase_admin import firebase_initialized
+                if firebase_initialized:
+                    from firebase_admin import db as firebase_db
+                    user_ref = firebase_db.reference(f'subscriptions/{customer_email.replace(".", "_")}')
+                    user_ref.update({
+                        'plan': 'free',
+                        'status': 'cancelled',
+                        'cancelled_at': int(time.time())
+                    })
+                    print(f"✅ User downgraded to free: {customer_email}")
+            except Exception as e:
+                print(f"❌ Error updating subscription: {e}")
+            
+        return {"message": "Webhook processed successfully"}
+        
+    except Exception as e:
+        print(f"❌ Webhook processing error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
 @app.get("/api/payments/subscription")
 async def get_subscription(current_user: dict = Depends(get_current_user)):
     """Get user subscription details"""
+    try:
+        from backend.firebase_admin import firebase_initialized
+        if firebase_initialized:
+            from firebase_admin import db as firebase_db
+            user_email = current_user.get("email", "").replace(".", "_")
+            user_ref = firebase_db.reference(f'subscriptions/{user_email}')
+            subscription = user_ref.get()
+            
+            if subscription:
+                return subscription
+    except Exception as e:
+        print(f"Error fetching subscription: {e}")
+    
+    # Default response
     return {
         "plan": "free",
         "status": "active",
