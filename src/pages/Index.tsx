@@ -97,8 +97,9 @@ const Index = () => {
             <div>
               <h3 className="font-semibold mb-4">{t('footer.legal')}</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="/privacy" className="hover:text-primary transition-colors">{t('footer.privacy')}</a></li>
-                <li><a href="/terms" className="hover:text-primary transition-colors">{t('footer.terms')}</a></li>
+                <li><Link to="/privacy" className="hover:text-primary transition-colors">{t('footer.privacy')}</Link></li>
+                <li><Link to="/terms" className="hover:text-primary transition-colors">{t('footer.terms')}</Link></li>
+                <li><Link to="/faq" className="hover:text-primary transition-colors">{t('footer.faq')}</Link></li>
                 <li><a href="#" className="hover:text-primary transition-colors">{t('footer.gdpr')}</a></li>
                 <li><a href="#" className="hover:text-primary transition-colors">{t('footer.risk')}</a></li>
               </ul>

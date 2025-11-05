@@ -10,12 +10,29 @@ import hashlib
 import hmac
 import time
 
+# Import auto-trading router
+try:
+    from backend.api.auto_trading import router as auto_trading_router, init_ema_monitor
+    AUTO_TRADING_AVAILABLE = True
+except ImportError:
+    AUTO_TRADING_AVAILABLE = False
+    print("Warning: Auto-trading module not available")
+
 app = FastAPI(title="EMA Navigator AI Trading API")
+
+# Include auto-trading router if available
+if AUTO_TRADING_AVAILABLE:
+    app.include_router(auto_trading_router)
 
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update with your frontend URL in production
+    allow_origins=[
+        "https://aitraderglobal-1.lovable.app",
+        "https://aitraderglobal.lovable.app", 
+        "http://localhost:5173",
+        "http://localhost:8080"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -12,6 +12,7 @@ import { useTradingSettings } from '@/hooks/useTradingSettings';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { botAPI } from '@/lib/api';
+import { TPSLCalculator } from './TPSLCalculator';
 
 interface Coin {
   symbol: string;
@@ -32,6 +33,7 @@ export const TradingForm = () => {
   const [leverage, setLeverage] = useState<string>(settings.defaultLeverage.toString());
   const [tpPercent, setTpPercent] = useState<string>(settings.defaultTP.toString());
   const [slPercent, setSlPercent] = useState<string>(settings.defaultSL.toString());
+  const [interval, setInterval] = useState<string>('15m');
   const [coins, setCoins] = useState<Coin[]>([]);
   const [loadingCoins, setLoadingCoins] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,7 +66,7 @@ export const TradingForm = () => {
     if (selectedCoin && selectedExchange) {
       fetchEmaSignal();
     }
-  }, [selectedCoin, selectedExchange]);
+  }, [selectedCoin, selectedExchange, interval]);
 
   const fetchEmaSignal = async () => {
     if (!selectedCoin || !selectedExchange) return;
@@ -74,7 +76,7 @@ export const TradingForm = () => {
       const exchange = exchanges.find(e => e.id === selectedExchange);
       if (!exchange) return;
 
-      const response = await botAPI.getEmaSignal(exchange.name.toLowerCase(), selectedCoin, '15m');
+      const response = await botAPI.getEmaSignal(exchange.name.toLowerCase(), selectedCoin, interval);
       setEmaSignal(response.data);
     } catch (error) {
       console.error('Failed to fetch EMA signal:', error);
@@ -196,6 +198,23 @@ export const TradingForm = () => {
           </Select>
         </div>
 
+        {/* Interval Selection */}
+        <div className="space-y-2">
+          <Label>{t('trading.interval')}</Label>
+          <Select value={interval} onValueChange={setInterval}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="15m">15 {t('trading.minutes')}</SelectItem>
+              <SelectItem value="30m">30 {t('trading.minutes')}</SelectItem>
+              <SelectItem value="1h">1 {t('trading.hour')}</SelectItem>
+              <SelectItem value="4h">4 {t('trading.hours')}</SelectItem>
+              <SelectItem value="1d">1 {t('trading.day')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* EMA Signal */}
         {emaSignal && (
           <div className={`p-3 rounded-lg border ${
@@ -269,6 +288,18 @@ export const TradingForm = () => {
             />
           </div>
         </div>
+
+        {/* TP/SL Calculator */}
+        {selectedCoin && amount && (
+          <TPSLCalculator
+            amount={parseFloat(amount)}
+            leverage={parseInt(leverage)}
+            entryPrice={coins.find(c => c.symbol === selectedCoin)?.price || 0}
+            tpPercent={parseFloat(tpPercent)}
+            slPercent={parseFloat(slPercent)}
+            side={side}
+          />
+        )}
 
         {/* Submit Button */}
         <Button

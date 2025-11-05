@@ -7,6 +7,8 @@ export interface SubscriptionPlan {
   id: SubscriptionTier;
   name: string;
   price: number;
+  priceUSD: number;
+  priceTRY: number;
   currency: string;
   features: string[];
   exchangeLimit: number;
@@ -19,26 +21,30 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     id: 'free',
     name: 'Free',
     price: 0,
+    priceUSD: 0,
+    priceTRY: 0,
     currency: 'USD',
-    features: ['1 exchange connection', 'Trading signals', 'Basic dashboard'],
-    exchangeLimit: 1,
+    features: ['View all exchanges', 'Trading signals', 'Basic dashboard', 'Manual trading only'],
+    exchangeLimit: -1,
     autoTrading: false,
     customStrategies: false,
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    price: 29,
+    price: 25,
+    priceUSD: 25,
+    priceTRY: 1052.83,
     currency: 'USD',
     features: [
-      '5 exchange connections',
-      'Automated trading',
-      'EMA strategies',
+      'Connect unlimited exchanges',
+      'Automated trading bot',
+      'EMA 9/21 strategy signals',
       'TP/SL management',
       'Advanced analytics',
       'Priority support',
     ],
-    exchangeLimit: 5,
+    exchangeLimit: -1,
     autoTrading: true,
     customStrategies: false,
   },
@@ -46,6 +52,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, SubscriptionPlan> = {
     id: 'enterprise',
     name: 'Enterprise',
     price: 299,
+    priceUSD: 299,
+    priceTRY: 12590.89,
     currency: 'USD',
     features: [
       'Unlimited exchanges',

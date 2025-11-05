@@ -1,27 +1,18 @@
 import axios from 'axios';
 
+// API config (clean) - ensure no merge markers are present
 // API Base URL - update this with your Render backend URL in production
-<<<<<<< HEAD
 const LS_OVERRIDE_KEY = 'api_base_url_override';
 const overrideBase = typeof window !== 'undefined' ? localStorage.getItem(LS_OVERRIDE_KEY) : null;
 const API_BASE_URL = (overrideBase || import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000');
-=======
-const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000';
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
 
 // Debug logging
 console.log('🔧 API Configuration:', {
   VITE_API_URL: import.meta.env.VITE_API_URL,
   VITE_TRADING_API_URL: import.meta.env.VITE_TRADING_API_URL,
-<<<<<<< HEAD
   Override_LocalStorage: overrideBase || 'Not set',
   Final_API_BASE_URL: API_BASE_URL,
   Mode: import.meta.env.MODE,
-=======
-  Final_API_BASE_URL: API_BASE_URL,
-  Mode: import.meta.env.MODE,
-  All_ENV_VARS: import.meta.env
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
 });
 
 // Create axios instance
@@ -45,7 +36,6 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-<<<<<<< HEAD
     if (error.response?.status === 401) {
       console.error('🔒 401 Unauthorized:', {
         url: error.config?.url,
@@ -54,9 +44,6 @@ api.interceptors.response.use(
         errorDetail: error.response?.data
       });
     }
-=======
-    // Do not clear Firebase token on 401; let components handle gracefully
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
     return Promise.reject(error);
   }
 );

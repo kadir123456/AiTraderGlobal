@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { saveUserData } from '@/lib/firebaseAdmin';
 
 interface AuthContextType {
   user: User | null;
@@ -74,7 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (email: string, password: string) => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      // Save user data to Firebase Realtime Database
+      await saveUserData(result.user.uid, email);
       toast.success('Account created successfully!');
     } catch (error: any) {
       console.error('Signup error:', error);
@@ -134,7 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      // Save user data if new user
+      if (result.user.metadata.creationTime === result.user.metadata.lastSignInTime) {
+        await saveUserData(result.user.uid, result.user.email || '', result.user.displayName || '');
+      }
       toast.success('Logged in with Google!');
     } catch (error: any) {
       console.error('Google login error:', error);

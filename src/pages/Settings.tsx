@@ -14,6 +14,7 @@ import { ref, set } from "firebase/database";
 import { database } from "@/lib/firebase";
 import ExchangeList from "@/components/ExchangeList";
 import { IPWhitelistCard } from "@/components/IPWhitelistCard";
+import { AutoTradingToggle } from "@/components/AutoTradingToggle";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 const Settings = () => {
@@ -76,9 +77,10 @@ const Settings = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="exchanges" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="exchanges">{t('settings.exchanges')}</TabsTrigger>
             <TabsTrigger value="trading">{t('settings.trading')}</TabsTrigger>
+            <TabsTrigger value="auto-trading">Auto Trading</TabsTrigger>
             <TabsTrigger value="subscription">{t('settings.subscription')}</TabsTrigger>
             <TabsTrigger value="profile">{t('settings.profile')}</TabsTrigger>
           </TabsList>
@@ -162,6 +164,11 @@ const Settings = () => {
                 <Button onClick={handleSaveSettings}>{t('settings.save_settings')}</Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Auto Trading Tab */}
+          <TabsContent value="auto-trading">
+            <AutoTradingToggle />
           </TabsContent>
 
           {/* Subscription Tab */}

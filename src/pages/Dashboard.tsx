@@ -1,14 +1,17 @@
 import { useMemo, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu } from "lucide-react";
+import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { CurrencyToggle } from "@/components/CurrencyToggle";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { StatsCard } from "@/components/StatsCard";
 import { PositionCard } from "@/components/PositionCard";
-import { APIHealthCheck } from "@/components/APIHealthCheck";
+import { useAdmin } from "@/hooks/useAdmin";
+
 import { useTrading } from "@/hooks/useTrading";
 import { useSubscription } from "@/hooks/useSubscription";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +20,8 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const Dashboard = () => {
   const { t } = useTranslation();
   const { user, loading: authLoading, logout } = useAuth();
+  const { isAdmin } = useAdmin();
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
 
   // Redirect to auth if not logged in
@@ -38,9 +43,9 @@ const Dashboard = () => {
 
   // Calculate real stats from positions
   const stats = useMemo(() => {
-    const totalPnL = positions.reduce((sum, pos) => sum + pos.pnl, 0);
+    const totalPnL = positions.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
     const totalPnLPercent = positions.length > 0 
-      ? positions.reduce((sum, pos) => sum + pos.pnlPercent, 0) / positions.length 
+      ? positions.reduce((sum, pos) => sum + (pos.pnlPercent || 0), 0) / positions.length 
       : 0;
 
     // Calculate total balance (would come from exchange API in production)
@@ -49,8 +54,8 @@ const Dashboard = () => {
     return [
       { 
         label: t('dashboard.total_balance'), 
-        value: `$${estimatedBalance.toFixed(2)}`, 
-        change: totalPnL >= 0 ? `+${totalPnL.toFixed(2)}` : `${totalPnL.toFixed(2)}`, 
+        value: formatPrice(estimatedBalance), 
+        change: totalPnL >= 0 ? `+${formatPrice(totalPnL)}` : formatPrice(totalPnL), 
         icon: DollarSign, 
         trend: totalPnL >= 0 ? "up" as const : "neutral" as const
       },
@@ -63,7 +68,7 @@ const Dashboard = () => {
       },
       { 
         label: t('dashboard.today_pnl'), 
-        value: totalPnL >= 0 ? `+$${totalPnL.toFixed(2)}` : `-$${Math.abs(totalPnL).toFixed(2)}`, 
+        value: totalPnL >= 0 ? `+${formatPrice(totalPnL)}` : formatPrice(totalPnL), 
         change: totalPnLPercent >= 0 ? `+${totalPnLPercent.toFixed(2)}%` : `${totalPnLPercent.toFixed(2)}%`, 
         icon: TrendingUp, 
         trend: totalPnL >= 0 ? "up" as const : "neutral" as const
@@ -76,7 +81,7 @@ const Dashboard = () => {
         trend: "up" as const
       },
     ];
-  }, [positions, plan, t]);
+  }, [positions, plan, t, formatPrice]);
 
   const handleLogout = async () => {
     await logout();
@@ -98,6 +103,7 @@ const Dashboard = () => {
             
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-3">
+              <CurrencyToggle />
               <LanguageSwitcher />
               <Button variant="default" size="sm" onClick={() => navigate('/trading')}>
                 {t('dashboard.open_trade')}
@@ -105,6 +111,12 @@ const Dashboard = () => {
               <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>
                 {t('dashboard.settings')}
               </Button>
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
+                  <Shield className="h-4 w-4 mr-1" />
+                  Admin
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={handleLogout}>
                 {t('dashboard.logout')}
               </Button>
@@ -112,6 +124,7 @@ const Dashboard = () => {
 
             {/* Mobile Navigation */}
             <div className="flex md:hidden items-center gap-2">
+              <CurrencyToggle />
               <LanguageSwitcher />
               <Sheet>
                 <SheetTrigger asChild>
@@ -135,6 +148,16 @@ const Dashboard = () => {
                     >
                       {t('dashboard.settings')}
                     </Button>
+                    {isAdmin && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start" 
+                        onClick={() => navigate('/admin')}
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        Admin
+                      </Button>
+                    )}
                     <Button 
                       variant="ghost" 
                       className="w-full justify-start" 
@@ -152,12 +175,6 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* API Health Check */}
-        <div className="mb-6">
-          <APIHealthCheck />
-        </div>
-
-<<<<<<< HEAD
         {/* How to Use */}
         <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
           <CardHeader>
@@ -177,23 +194,6 @@ const Dashboard = () => {
               <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>
                 {t('dashboard.go_to_trading')}
               </Button>
-=======
-        {/* Nasıl Kullanılır */}
-        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
-          <CardHeader>
-            <CardTitle className="text-xl">Nasıl Kullanılır?</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-              <li>Ayarlar &gt; Borsalar sekmesinden API anahtarınızı ekleyin (Binance/Bybit/OKX).</li>
-              <li>Aboneliğiniz plan limitlerini belirler. Gerekirse Ayarlar &gt; Abonelik'ten yükseltin.</li>
-              <li>Trading sayfasında sembol seçip işlem parametrelerini girin ve pozisyon açın.</li>
-              <li>Dashboard’da açık pozisyonlarınızı ve performansınızı takip edin.</li>
-            </ol>
-            <div className="mt-4 flex gap-3">
-              <Button size="sm" onClick={() => navigate('/settings')}>Ayarlar</Button>
-              <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>Trading’e Git</Button>
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
             </div>
           </CardContent>
         </Card>

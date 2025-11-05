@@ -3,20 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { useNavigate } from "react-router-dom";
 import { openCheckout } from "@/lib/lemonsqueezy";
 import { toast } from "@/hooks/use-toast";
+import { SUBSCRIPTION_PLANS } from "@/lib/payment";
 
 const Pricing = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { currency, formatPrice } = useCurrency();
   const navigate = useNavigate();
 
   const plans = [
     {
       id: 'free' as const,
       name: t('pricing.free_name'),
-      price: t('pricing.free_price'),
+      price: formatPrice(SUBSCRIPTION_PLANS.free.priceUSD),
       period: t('pricing.free_period'),
       description: t('pricing.free_desc'),
       features: [
@@ -32,7 +35,7 @@ const Pricing = () => {
     {
       id: 'pro' as const,
       name: t('pricing.pro_name'),
-      price: t('pricing.pro_price'),
+      price: formatPrice(SUBSCRIPTION_PLANS.pro.priceUSD),
       period: t('pricing.pro_period'),
       description: t('pricing.pro_desc'),
       features: [
@@ -50,7 +53,7 @@ const Pricing = () => {
     {
       id: 'enterprise' as const,
       name: t('pricing.enterprise_name'),
-      price: t('pricing.enterprise_price'),
+      price: formatPrice(SUBSCRIPTION_PLANS.enterprise.priceUSD),
       period: t('pricing.enterprise_period'),
       description: t('pricing.enterprise_desc'),
       features: [
