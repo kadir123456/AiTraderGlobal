@@ -4,19 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import axios from "axios";
-<<<<<<< HEAD
 import { Input } from "@/components/ui/input";
 
+// API Health Check Component
+
 const LS_OVERRIDE_KEY = 'api_base_url_override';
-=======
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
 
 export const APIHealthCheck = () => {
   const [status, setStatus] = useState<'checking' | 'online' | 'offline' | 'error'>('checking');
   const [apiUrl, setApiUrl] = useState<string>('');
   const [errorDetails, setErrorDetails] = useState<string>('');
   const [checking, setChecking] = useState(false);
-<<<<<<< HEAD
   const [editingUrl, setEditingUrl] = useState<string>('');
 
   const getBaseUrl = () => localStorage.getItem(LS_OVERRIDE_KEY) || import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000';
@@ -26,31 +24,18 @@ export const APIHealthCheck = () => {
     else localStorage.removeItem(LS_OVERRIDE_KEY);
     setApiUrl(getBaseUrl());
   };
-=======
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
 
   const checkHealth = async () => {
     setChecking(true);
     setStatus('checking');
-<<<<<<< HEAD
     const baseUrl = getBaseUrl();
     setApiUrl(baseUrl);
 
-=======
-    
-    const baseUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_TRADING_API_URL || 'http://localhost:8000';
-    setApiUrl(baseUrl);
-    
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
     try {
       console.log('🔍 Checking API health at:', `${baseUrl}/health`);
       const response = await axios.get(`${baseUrl}/health`, { timeout: 10000 });
       console.log('✅ API Health Response:', response.data);
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
       if (response.status === 200) {
         setStatus('online');
         setErrorDetails('');
@@ -58,11 +43,7 @@ export const APIHealthCheck = () => {
     } catch (error: any) {
       console.error('❌ API Health Check Failed:', error);
       setStatus('offline');
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
       if (error.code === 'ECONNABORTED') {
         setErrorDetails('Timeout - Backend yanıt vermiyor');
       } else if (error.response) {
@@ -78,10 +59,7 @@ export const APIHealthCheck = () => {
   };
 
   useEffect(() => {
-<<<<<<< HEAD
     setEditingUrl(localStorage.getItem(LS_OVERRIDE_KEY) || '');
-=======
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
     checkHealth();
   }, []);
 
@@ -128,7 +106,6 @@ export const APIHealthCheck = () => {
               {apiUrl || 'Loading...'}
             </code>
           </div>
-<<<<<<< HEAD
 
           <div className="flex items-center gap-2">
             <Input
@@ -144,26 +121,16 @@ export const APIHealthCheck = () => {
             </Button>
           </div>
 
-=======
-          
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
           {errorDetails && (
             <div className="bg-destructive/10 border border-destructive/20 rounded p-2 text-xs text-destructive">
               <strong>Error:</strong> {errorDetails}
             </div>
           )}
-<<<<<<< HEAD
 
           <div className="bg-muted/50 rounded p-2 text-xs space-y-1">
             <div><strong>VITE_API_URL:</strong> {import.meta.env.VITE_API_URL || 'Not set'}</div>
             <div><strong>VITE_TRADING_API_URL:</strong> {import.meta.env.VITE_TRADING_API_URL || 'Not set'}</div>
             <div><strong>Override (LS):</strong> {localStorage.getItem(LS_OVERRIDE_KEY) || 'Not set'}</div>
-=======
-          
-          <div className="bg-muted/50 rounded p-2 text-xs space-y-1">
-            <div><strong>VITE_API_URL:</strong> {import.meta.env.VITE_API_URL || 'Not set'}</div>
-            <div><strong>VITE_TRADING_API_URL:</strong> {import.meta.env.VITE_TRADING_API_URL || 'Not set'}</div>
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
             <div><strong>Mode:</strong> {import.meta.env.MODE}</div>
           </div>
         </div>
@@ -187,17 +154,10 @@ export const APIHealthCheck = () => {
           <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
             <strong>Kontrol Listesi:</strong>
             <ul className="list-disc ml-4 mt-1 space-y-1">
-<<<<<<< HEAD
               <li>Frontend statik domain ile Backend domain farklı olmalı.</li>
               <li>VITE_API_URL veya üstteki override doğru backend URL'ini göstermeli.</li>
               <li>Backend /health endpoint'i 200 dönmeli.</li>
               <li>CORS ayarları frontend domainini kapsamalı.</li>
-=======
-              <li>Backend servisi Render'da çalışıyor mu?</li>
-              <li>VITE_API_URL doğru backend URL'ini gösteriyor mu?</li>
-              <li>Backend /health endpoint'i aktif mi?</li>
-              <li>CORS ayarları doğru mu?</li>
->>>>>>> 02c386b7a015e7a52419780c807e10200d842c49
             </ul>
           </div>
         )}
