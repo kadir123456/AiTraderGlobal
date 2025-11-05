@@ -48,13 +48,14 @@ const Dashboard = () => {
       ? positions.reduce((sum, pos) => sum + (pos.pnlPercent || 0), 0) / positions.length 
       : 0;
 
-    // Calculate total balance (would come from exchange API in production)
-    const estimatedBalance = 10000 + totalPnL;
+    // TODO: Get real balance from exchange API
+    // For now showing PnL only (balance would come from /api/bot/balance endpoint)
+    const displayBalance = totalPnL;
 
     return [
       { 
         label: t('dashboard.total_balance'), 
-        value: formatPrice(estimatedBalance), 
+        value: formatPrice(displayBalance), 
         change: totalPnL >= 0 ? `+${formatPrice(totalPnL)}` : formatPrice(totalPnL), 
         icon: DollarSign, 
         trend: totalPnL >= 0 ? "up" as const : "neutral" as const
@@ -62,7 +63,7 @@ const Dashboard = () => {
       { 
         label: t('dashboard.open_positions'), 
         value: positions.length.toString(), 
-        change: t('dashboard.active'), 
+        change: plan.id === 'free' ? `Max ${plan.exchangeLimit === -1 ? '∞' : plan.exchangeLimit * 2}` : t('dashboard.active'), 
         icon: Activity, 
         trend: "neutral" as const
       },

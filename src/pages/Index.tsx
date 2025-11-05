@@ -30,9 +30,12 @@ const Index = () => {
               <a href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">
                 {t('nav.pricing')}
               </a>
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
-                {t('nav.docs')}
-              </a>
+              <Link to="/pricing" className="text-sm font-medium hover:text-primary transition-colors">
+                Fiyatlandırma
+              </Link>
+              <Link to="/faq" className="text-sm font-medium hover:text-primary transition-colors">
+                SSS
+              </Link>
             </div>
 
             <div className="flex items-center gap-2">

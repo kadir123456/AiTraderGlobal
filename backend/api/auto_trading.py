@@ -7,8 +7,13 @@ from typing import Optional, List
 from datetime import datetime
 import logging
 
-from ..auth import get_current_user
-from ..services.ema_monitor import EMAMonitor
+from backend.auth import get_current_user
+try:
+    from backend.services.ema_monitor import EMAMonitor
+    EMA_MONITOR_AVAILABLE = True
+except ImportError:
+    EMA_MONITOR_AVAILABLE = False
+    print("⚠️ Warning: EMA Monitor not available")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auto-trading", tags=["auto-trading"])

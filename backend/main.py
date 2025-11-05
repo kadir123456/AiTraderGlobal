@@ -10,19 +10,60 @@ import hashlib
 import hmac
 import time
 
+# Import database module
+try:
+    from backend.database import db
+    DATABASE_AVAILABLE = True
+except ImportError:
+    DATABASE_AVAILABLE = False
+    print("⚠️ Warning: Database module not available")
+
+# Import authentication
+from backend.auth import get_current_user, get_user_plan, check_plan_limits
+
 # Import auto-trading router
 try:
-    from backend.api.auto_trading import router as auto_trading_router, init_ema_monitor
+    from backend.api.auto_trading import router as auto_trading_router
+    try:
+        from backend.api.auto_trading import init_ema_monitor
+        EMA_INIT_AVAILABLE = True
+    except ImportError:
+        EMA_INIT_AVAILABLE = False
     AUTO_TRADING_AVAILABLE = True
-except ImportError:
+    print("✅ Auto-trading module loaded successfully")
+except ImportError as e:
     AUTO_TRADING_AVAILABLE = False
-    print("Warning: Auto-trading module not available")
+    EMA_INIT_AVAILABLE = False
+    print(f"⚠️ Warning: Auto-trading module not available - {str(e)}")
+
+# Import exchange services
+try:
+    from backend.services import binance_service, bybit_service, okx_service, kucoin_service, mexc_service
+    EXCHANGE_SERVICES_AVAILABLE = True
+except ImportError:
+    EXCHANGE_SERVICES_AVAILABLE = False
+    print("Warning: Exchange services not available")
 
 app = FastAPI(title="EMA Navigator AI Trading API")
 
-# Include auto-trading router if available
+# Include routers
 if AUTO_TRADING_AVAILABLE:
     app.include_router(auto_trading_router)
+
+# Include balance router
+try:
+    from backend.api.balance import router as balance_router
+    app.include_router(balance_router)
+except ImportError:
+    print("Warning: Balance module not available")
+
+# Include payments router
+try:
+    from backend.api.payments import router as payments_router
+    app.include_router(payments_router)
+    print("✅ Payments module loaded")
+except ImportError:
+    print("⚠️ Warning: Payments module not available")
 
 # CORS Configuration
 app.add_middleware(
@@ -73,6 +114,8 @@ class PositionRequest(BaseModel):
     leverage: int = 10
     tp_percentage: float
     sl_percentage: float
+    is_futures: bool = True  # Default to futures, set False for spot
+    passphrase: Optional[str] = None  # For OKX and KuCoin
 
 # Helper Functions
 def create_jwt_token(user_id: str, email: str) -> str:
@@ -358,75 +401,213 @@ async def get_ema_signal(request: EMARequest, current_user: dict = Depends(get_c
     return result
 
 @app.get("/api/bot/positions")
-async def get_positions(current_user: dict = Depends(get_current_user)):
-    """Get user's open positions"""
-    # TODO: Fetch from database
-    return {
-        "positions": [
-            {
-                "id": "1",
-                "symbol": "BTCUSDT",
-                "side": "LONG",
-                "entry_price": 45000.0,
-                "current_price": 46000.0,
-                "pnl": 1000.0,
-                "pnl_percentage": 2.22,
-                "amount": 0.5,
-                "opened_at": datetime.utcnow().isoformat()
-            }
-        ]
-    }
+async def get_positions(current_user: dict = Depends(get_current_user), exchange: Optional[str] = None):
+    """Get user's open positions from all exchanges or specific exchange"""
+    if not EXCHANGE_SERVICES_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Exchange services not available")
+    
+    user_id = current_user.get("user_id")
+    
+    # TODO: Fetch user's API keys from database
+    # For now using mock - REPLACE IN PRODUCTION
+    api_key = "mock_api_key"
+    api_secret = "mock_api_secret"
+    passphrase = ""
+    
+    all_positions = []
+    exchanges_to_check = [exchange.lower()] if exchange else ["binance", "bybit", "okx", "kucoin", "mexc"]
+    
+    for exch in exchanges_to_check:
+        try:
+            positions = []
+            
+            # Fetch positions from exchange
+            if exch == "binance":
+                positions = await binance_service.get_positions(api_key, api_secret, is_futures=True)
+            elif exch == "bybit":
+                positions = await bybit_service.get_positions(api_key, api_secret, is_futures=True)
+            elif exch == "okx":
+                positions = await okx_service.get_positions(api_key, api_secret, is_futures=True, passphrase=passphrase)
+            elif exch == "kucoin":
+                positions = await kucoin_service.get_positions(api_key, api_secret, is_futures=True, passphrase=passphrase)
+            elif exch == "mexc":
+                positions = await mexc_service.get_positions(api_key, api_secret, is_futures=True)
+            
+            # Add exchange info to each position
+            for pos in positions:
+                pos["exchange"] = exch
+                pos["id"] = f"{exch}_{pos['symbol']}_{int(datetime.utcnow().timestamp())}"
+                all_positions.append(pos)
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch positions from {exch}: {str(e)}")
+            continue
+    
+    return {"positions": all_positions}
 
 @app.post("/api/bot/positions")
 async def create_position(position: PositionRequest, current_user: dict = Depends(get_current_user)):
-    """Create new trading position with leverage and TP/SL"""
+    """Create new trading position with leverage and TP/SL - Multi-Exchange Support"""
+    if not EXCHANGE_SERVICES_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Exchange services not available")
+    
+    from backend.auth import get_user_plan, check_plan_limits
+    
     user_id = current_user.get("user_id")
+    exchange = position.exchange.lower()
     
-    # TODO: Check user's subscription plan and position limits
-    # Free: 1 exchange, 3 max positions
-    # Pro: 5 exchanges, 10 max positions  
-    # Enterprise: Unlimited exchanges, 50 max positions
+    # Check user's subscription plan and position limits
+    user_plan = await get_user_plan(user_id)
     
-    # TODO: Validate exchange API key exists for user
-    # TODO: Execute actual trade via exchange API with leverage
+    # Get current open positions count (TODO: fetch from database)
+    current_positions_count = 0  # Replace with actual DB query
     
-    # Calculate TP/SL prices based on percentages
-    entry_price = 45000.0  # TODO: Get real entry price from exchange
+    # Check plan limits
+    limit_check = check_plan_limits(user_plan, current_positions_count)
     
-    if position.side.upper() == "LONG":
-        tp_price = entry_price * (1 + position.tp_percentage / 100)
-        sl_price = entry_price * (1 - position.sl_percentage / 100)
-    else:  # SHORT
-        tp_price = entry_price * (1 - position.tp_percentage / 100)
-        sl_price = entry_price * (1 + position.sl_percentage / 100)
+    if not limit_check["can_open"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Position limit reached. {limit_check['message']}. Upgrade to Pro for more positions."
+        )
     
-    # Mock response - in production this would be real position data
-    mock_position = {
-        "id": f"pos_{datetime.utcnow().timestamp()}",
-        "symbol": position.symbol,
-        "side": position.side.upper(),
-        "entry_price": entry_price,
-        "current_price": entry_price,
-        "amount": position.amount,
-        "leverage": position.leverage,
-        "tp_price": round(tp_price, 2),
-        "sl_price": round(sl_price, 2),
-        "tp_percentage": position.tp_percentage,
-        "sl_percentage": position.sl_percentage,
-        "pnl": 0.0,
-        "pnl_percentage": 0.0,
-        "exchange": position.exchange,
-        "opened_at": datetime.utcnow().isoformat(),
-        "status": "open"
-    }
+    # TODO: Fetch user's API keys from database for the selected exchange
+    # For now using mock keys - REPLACE IN PRODUCTION
+    api_key = "mock_api_key"
+    api_secret = "mock_api_secret"
+    passphrase = position.passphrase or ""
     
-    print(f"[TRADING] Position opened: {position.side} {position.symbol} @ {entry_price} with {position.leverage}x leverage")
-    print(f"[TRADING] TP: {round(tp_price, 2)} ({position.tp_percentage}%) | SL: {round(sl_price, 2)} ({position.sl_percentage}%)")
+    # Validate API keys exist
+    if not api_key or api_key == "mock_api_key":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Exchange credentials missing for {exchange}. Please add your API keys in Settings."
+        )
     
-    return {
-        "message": "Position opened successfully",
-        "position": mock_position
-    }
+    try:
+        # Route to appropriate exchange service
+        if exchange == "binance":
+            order_result = await binance_service.create_order(
+                api_key=api_key,
+                api_secret=api_secret,
+                symbol=position.symbol,
+                side=position.side.upper(),
+                amount=position.amount,
+                leverage=position.leverage,
+                is_futures=position.is_futures,
+                tp_percentage=position.tp_percentage,
+                sl_percentage=position.sl_percentage
+            )
+        elif exchange == "bybit":
+            order_result = await bybit_service.create_order(
+                api_key=api_key,
+                api_secret=api_secret,
+                symbol=position.symbol,
+                side=position.side.upper(),
+                amount=position.amount,
+                leverage=position.leverage,
+                is_futures=position.is_futures,
+                tp_percentage=position.tp_percentage,
+                sl_percentage=position.sl_percentage
+            )
+        elif exchange == "okx":
+            order_result = await okx_service.create_order(
+                api_key=api_key,
+                api_secret=api_secret,
+                symbol=position.symbol,
+                side=position.side.upper(),
+                amount=position.amount,
+                leverage=position.leverage,
+                is_futures=position.is_futures,
+                tp_percentage=position.tp_percentage,
+                sl_percentage=position.sl_percentage,
+                passphrase=passphrase
+            )
+        elif exchange == "kucoin":
+            order_result = await kucoin_service.create_order(
+                api_key=api_key,
+                api_secret=api_secret,
+                symbol=position.symbol,
+                side=position.side.upper(),
+                amount=position.amount,
+                leverage=position.leverage,
+                is_futures=position.is_futures,
+                tp_percentage=position.tp_percentage,
+                sl_percentage=position.sl_percentage,
+                passphrase=passphrase
+            )
+        elif exchange == "mexc":
+            order_result = await mexc_service.create_order(
+                api_key=api_key,
+                api_secret=api_secret,
+                symbol=position.symbol,
+                side=position.side.upper(),
+                amount=position.amount,
+                leverage=position.leverage,
+                is_futures=position.is_futures,
+                tp_percentage=position.tp_percentage,
+                sl_percentage=position.sl_percentage
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Exchange {exchange} not supported")
+        
+        # Get current price for calculations
+        if exchange == "binance":
+            current_price = await binance_service.get_current_price(api_key, api_secret, position.symbol, position.is_futures)
+        elif exchange == "bybit":
+            current_price = await bybit_service.get_current_price(api_key, api_secret, position.symbol, position.is_futures)
+        elif exchange == "okx":
+            current_price = await okx_service.get_current_price(api_key, api_secret, position.symbol, position.is_futures, passphrase)
+        elif exchange == "kucoin":
+            current_price = await kucoin_service.get_current_price(api_key, api_secret, position.symbol, position.is_futures, passphrase)
+        elif exchange == "mexc":
+            current_price = await mexc_service.get_current_price(api_key, api_secret, position.symbol, position.is_futures)
+        else:
+            current_price = 0.0
+        
+        # Calculate TP/SL prices
+        if position.side.upper() == "LONG" or position.side.upper() == "BUY":
+            tp_price = current_price * (1 + position.tp_percentage / 100)
+            sl_price = current_price * (1 - position.sl_percentage / 100)
+        else:  # SHORT/SELL
+            tp_price = current_price * (1 - position.tp_percentage / 100)
+            sl_price = current_price * (1 + position.sl_percentage / 100)
+        
+        # TODO: Store position in database
+        position_data = {
+            "id": f"pos_{int(datetime.utcnow().timestamp() * 1000)}",
+            "user_id": user_id,
+            "exchange": exchange,
+            "symbol": position.symbol,
+            "side": position.side.upper(),
+            "entry_price": current_price,
+            "current_price": current_price,
+            "amount": position.amount,
+            "leverage": position.leverage,
+            "is_futures": position.is_futures,
+            "tp_price": round(tp_price, 2),
+            "sl_price": round(sl_price, 2),
+            "tp_percentage": position.tp_percentage,
+            "sl_percentage": position.sl_percentage,
+            "pnl": 0.0,
+            "pnl_percentage": 0.0,
+            "opened_at": datetime.utcnow().isoformat(),
+            "status": "open",
+            "order_data": order_result
+        }
+        
+        print(f"[TRADING] {exchange.upper()} Position opened: {position.side} {position.symbol} @ {current_price}")
+        print(f"[TRADING] Type: {'FUTURES' if position.is_futures else 'SPOT'} | Leverage: {position.leverage}x")
+        print(f"[TRADING] TP: {round(tp_price, 2)} ({position.tp_percentage}%) | SL: {round(sl_price, 2)} ({position.sl_percentage}%)")
+        
+        return {
+            "message": f"Position opened successfully on {exchange.upper()}",
+            "position": position_data
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to create position on {exchange}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create position: {str(e)}")
 
 @app.delete("/api/bot/positions/{position_id}")
 async def close_position(position_id: str, current_user: dict = Depends(get_current_user)):
