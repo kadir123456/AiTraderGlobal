@@ -151,7 +151,8 @@ export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
     await initializeLemonSqueezy();
 
     // Build checkout URL with custom data
-    const checkoutUrl = `https://ema-navigator.lemonsqueezy.com/checkout/buy/${variantId}?` + 
+    // Note: Replace 'storename' with your actual LemonSqueezy store slug
+    const checkoutUrl = `https://aitraderglobal.lemonsqueezy.com/checkout/buy/${variantId}?` +
       `checkout[email]=${encodeURIComponent(options.email)}` +
       `&checkout[name]=${encodeURIComponent(options.name)}` +
       `&checkout[custom][user_email]=${encodeURIComponent(options.email)}`;
@@ -196,7 +197,7 @@ export const getCheckoutUrl = (planId: 'free' | 'pro' | 'enterprise', email: str
     return '#';
   }
 
-  const url = `https://ema-navigator.lemonsqueezy.com/checkout/buy/${variantId}?` +
+  const url = `https://aitraderglobal.lemonsqueezy.com/checkout/buy/${variantId}?` +
     `checkout[email]=${encodeURIComponent(email)}` +
     `&checkout[name]=${encodeURIComponent(name)}` +
     `&checkout[custom][user_email]=${encodeURIComponent(email)}`;
