@@ -14,7 +14,7 @@ interface TradingSignal {
 }
 
 interface SignalMessage {
-  type: 'signal' | 'connection' | 'status';
+  type: 'signal' | 'connection' | 'status' | 'ping' | 'pong';
   data?: TradingSignal;
   status?: string;
   message?: string;
@@ -31,6 +31,7 @@ export const useTradingSignals = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
 
   const connect = useCallback(() => {
@@ -50,29 +51,51 @@ export const useTradingSignals = () => {
         setConnectionStatus('connected');
         reconnectAttemptsRef.current = 0;
 
-        // Send ping every 30 seconds to keep connection alive
-        const pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send('ping');
-          }
-        }, 30000);
+        // Clear any existing ping interval
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
 
-        ws.addEventListener('close', () => {
-          clearInterval(pingInterval);
-        });
+        // Send ping every 25 seconds (backend sends every 30s, we respond faster)
+        pingIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send('ping');
+              console.debug('📡 Sent ping');
+            } catch (error) {
+              console.error('❌ Failed to send ping:', error);
+            }
+          }
+        }, 25000);
       };
 
       ws.onmessage = (event) => {
         try {
-          // Handle pong response
+          // Handle simple pong response (string)
           if (event.data === 'pong') {
+            console.debug('📡 Received pong');
             return;
           }
 
+          // Parse JSON messages
           const message: SignalMessage = JSON.parse(event.data);
 
           console.log('📨 WebSocket message received:', message.type);
 
+          // Handle ping from server
+          if (message.type === 'ping') {
+            console.debug('📡 Received server ping, sending pong');
+            ws.send('pong');
+            return;
+          }
+
+          // Handle pong from server
+          if (message.type === 'pong') {
+            console.debug('📡 Received pong from server');
+            return;
+          }
+
+          // Handle trading signal
           if (message.type === 'signal' && message.data) {
             const signal: TradingSignal = {
               ...message.data,
@@ -83,11 +106,17 @@ export const useTradingSignals = () => {
 
             setLatestSignal(signal);
             setSignals(prev => [signal, ...prev].slice(0, 50)); // Keep last 50 signals
-          } else if (message.type === 'connection') {
+          } 
+          // Handle connection confirmation
+          else if (message.type === 'connection') {
             console.log('✅ Connection confirmed:', message.message);
           }
+          // Handle status updates
+          else if (message.type === 'status') {
+            console.log('📊 Status update:', message.data);
+          }
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error('Error parsing WebSocket message:', error, event.data);
         }
       };
 
@@ -101,8 +130,14 @@ export const useTradingSignals = () => {
         setConnectionStatus('disconnected');
         wsRef.current = null;
 
-        // Reconnect with exponential backoff
-        if (reconnectAttemptsRef.current < 10) {
+        // Clear ping interval
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
+
+        // Only reconnect if not a normal closure (code 1000) and user is still logged in
+        if (event.code !== 1000 && user && reconnectAttemptsRef.current < 10) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
           console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current + 1})`);
 
@@ -122,13 +157,23 @@ export const useTradingSignals = () => {
   }, [user]);
 
   const disconnect = useCallback(() => {
+    console.log('🔌 Disconnecting WebSocket');
+    
+    // Clear reconnect timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
+    // Clear ping interval
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+
+    // Close WebSocket
     if (wsRef.current) {
-      wsRef.current.close();
+      wsRef.current.close(1000, 'User disconnected'); // Normal closure
       wsRef.current = null;
     }
 
