@@ -58,18 +58,42 @@ export const useExchanges = () => {
       throw new Error(`Exchange limit reached. Your ${tier} plan allows ${exchangeLimit} exchange${exchangeLimit === 1 ? '' : 's'}.`);
     }
 
-    await exchangeAPI.addApiKey(name, apiKey, apiSecret, passphrase);
-    const response = await exchangeAPI.getApiKeys();
-    setExchanges(response.data.exchanges || []);
-    return { success: true };
+    try {
+      console.log('🔗 Adding exchange:', name);
+      
+      await exchangeAPI.addApiKey(name, apiKey, apiSecret, passphrase);
+      
+      // Refresh exchange list
+      const response = await exchangeAPI.getApiKeys();
+      setExchanges(response.data.exchanges || []);
+      
+      console.log('✅ Exchange added successfully:', name);
+      return { success: true };
+      
+    } catch (error: any) {
+      console.error('Error connecting exchange:', error);
+      
+      // Handle 403 Forbidden error
+      if (error.response?.status === 403) {
+        throw new Error(error.response?.data?.detail || 'Exchange limit reached. Upgrade your plan to add more exchanges.');
+      }
+      
+      throw error;
+    }
   };
 
   const removeExchange = async (exchangeId: string) => {
     if (!user) throw new Error('User not authenticated');
-    await exchangeAPI.removeApiKey(exchangeId);
-    const response = await exchangeAPI.getApiKeys();
-    setExchanges(response.data.exchanges || []);
-    return { success: true };
+    
+    try {
+      await exchangeAPI.removeApiKey(exchangeId);
+      const response = await exchangeAPI.getApiKeys();
+      setExchanges(response.data.exchanges || []);
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing exchange:', error);
+      throw error;
+    }
   };
 
   return { exchanges, loading, addExchange, removeExchange, canAddMore, exchangeLimit };
