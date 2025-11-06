@@ -54,7 +54,19 @@ export const useBalance = (exchanges: string[], isFutures: boolean = true) => {
             loading: false,
           });
         } catch (error: any) {
-          console.error(`Failed to fetch balance for ${exchange}:`, error);
+          console.error(`❌ Failed to fetch balance for ${exchange}:`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            detail: error.response?.data?.detail,
+            message: error.message,
+            fullError: error
+          });
+
+          const errorMessage = error.response?.data?.detail
+            || error.response?.data?.message
+            || error.message
+            || 'Bakiye alınamadı. API anahtarlarınızı kontrol edin.';
+
           results.push({
             exchange: exchange,
             type: isFutures ? 'futures' : 'spot',
@@ -63,7 +75,7 @@ export const useBalance = (exchanges: string[], isFutures: boolean = true) => {
             usedBalance: 0,
             currency: 'USDT',
             loading: false,
-            error: error.response?.data?.detail || 'Failed to fetch balance',
+            error: errorMessage,
           });
         }
       }
@@ -104,7 +116,19 @@ export const useBalance = (exchanges: string[], isFutures: boolean = true) => {
           loading: false,
         });
       } catch (error: any) {
-        console.error(`Failed to fetch balance for ${exchange}:`, error);
+        console.error(`❌ Failed to refresh balance for ${exchange}:`, {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          detail: error.response?.data?.detail,
+          message: error.message,
+          fullError: error
+        });
+
+        const errorMessage = error.response?.data?.detail
+          || error.response?.data?.message
+          || error.message
+          || 'Bakiye alınamadı. API anahtarlarınızı kontrol edin.';
+
         results.push({
           exchange: exchange,
           type: isFutures ? 'futures' : 'spot',
@@ -113,7 +137,7 @@ export const useBalance = (exchanges: string[], isFutures: boolean = true) => {
           usedBalance: 0,
           currency: 'USDT',
           loading: false,
-          error: error.response?.data?.detail || 'Failed to fetch balance',
+          error: errorMessage,
         });
       }
     }

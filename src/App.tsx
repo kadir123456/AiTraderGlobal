@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Trading from "./pages/Trading";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import AdminSetup from "./pages/AdminSetup";
 import Pricing from "./pages/Pricing";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
@@ -53,6 +54,7 @@ const App = () => {
                   <Route path="/trading" element={<Trading />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin-setup" element={<AdminSetup />} />
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />

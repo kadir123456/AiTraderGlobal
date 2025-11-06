@@ -17,6 +17,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useExchanges } from "@/hooks/useExchanges";
 import { useBalance } from "@/hooks/useBalance";
 import { BalanceCard } from "@/components/BalanceCard";
+import { LiveSignalIndicator } from "@/components/LiveSignalIndicator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -288,6 +289,11 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Live Trading Signals */}
+        <div className="mb-8">
+          <LiveSignalIndicator />
+        </div>
 
         {/* Open Positions */}
         <Card className="border-border bg-card/50 backdrop-blur-sm">

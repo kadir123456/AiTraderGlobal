@@ -190,7 +190,7 @@ class EMAMonitorFirebase:
 
             # Save signal to Firebase if there's a crossover
             if signal:
-                logger.info(f"EMA Signal detected: {symbol} {signal} (EMA9: {ema9:.2f}, EMA21: {ema21:.2f})")
+                logger.info(f"🚨 EMA Signal detected: {symbol} {signal} (EMA9: {ema9:.2f}, EMA21: {ema21:.2f})")
                 save_ema_signal(user_id, {
                     'symbol': symbol,
                     'signal_type': signal,
@@ -200,6 +200,23 @@ class EMAMonitorFirebase:
                     'exchange': exchange_name,
                     'interval': interval
                 })
+
+                # Broadcast signal to ALL WebSocket clients
+                try:
+                    from backend.websocket_manager import connection_manager
+                    await connection_manager.broadcast_signal({
+                        'signal': signal,
+                        'exchange': exchange_name,
+                        'symbol': symbol,
+                        'price': round(ema9, 2),
+                        'ema9': round(ema9, 2),
+                        'ema21': round(ema21, 2),
+                        'interval': interval,
+                        'user_id': user_id
+                    })
+                    logger.info(f"📡 Signal broadcasted to all connected clients")
+                except Exception as e:
+                    logger.error(f"Failed to broadcast signal: {e}")
 
             return result
 

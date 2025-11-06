@@ -1,5 +1,5 @@
 # Last updated: 2025-11-06 17:21 - Fixed dependency_overrides
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -47,6 +47,15 @@ try:
 except ImportError:
     EXCHANGE_SERVICES_AVAILABLE = False
     print("⚠️ Warning: Exchange services not available")
+
+# Import WebSocket manager
+try:
+    from backend.websocket_manager import connection_manager
+    WEBSOCKET_AVAILABLE = True
+    print("✅ WebSocket manager loaded")
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+    print("⚠️ Warning: WebSocket manager not available")
 
 app = FastAPI(title="EMA Navigator AI Trading API")
 
@@ -695,6 +704,46 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
         "status": "active",
         "expires_at": None
     }
+
+@app.websocket("/ws/signals")
+async def websocket_signals(websocket: WebSocket):
+    """
+    WebSocket endpoint for broadcasting trading signals to all connected clients
+    Supports 1000+ concurrent connections
+    """
+    if not WEBSOCKET_AVAILABLE:
+        await websocket.close(code=1011, reason="WebSocket not available")
+        return
+
+    await connection_manager.connect(websocket)
+
+    try:
+        # Keep connection alive and listen for ping/pong
+        while True:
+            try:
+                # Wait for messages (ping/pong to keep connection alive)
+                data = await websocket.receive_text()
+
+                # Handle ping/pong
+                if data == "ping":
+                    await websocket.send_text("pong")
+
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+                break
+
+    finally:
+        connection_manager.disconnect(websocket)
+
+@app.get("/ws/stats")
+async def websocket_stats():
+    """Get WebSocket connection statistics"""
+    if not WEBSOCKET_AVAILABLE:
+        return {"error": "WebSocket not available"}
+
+    return connection_manager.get_stats()
 
 @app.get("/api/bot/transactions")
 async def get_transactions(hours: int = 24, current_user: dict = Depends(get_current_user)):
