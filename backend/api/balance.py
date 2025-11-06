@@ -3,19 +3,22 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 import logging
 
-from backend.main import get_current_user
 from backend.firebase_admin import get_user_api_keys
 from backend.services.unified_exchange import unified_exchange, ExchangeError, AuthenticationError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Dependency stub - will be overridden by main.py
+async def get_current_user_dependency(authorization: str = None):
+    """Stub for dependency injection"""
+    pass
 
 @router.get("/api/bot/balance/{exchange}")
 async def get_exchange_balance(
     exchange: str,
     is_futures: bool = True,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """
     Get balance from specific exchange (spot or futures)
