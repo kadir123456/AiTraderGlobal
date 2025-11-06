@@ -161,13 +161,10 @@ class UnifiedExchangeService:
                 from backend.services import binance_service
                 result = await binance_service.get_balance(api_key, api_secret, is_futures)
                 
-                # Yeni log satırı: Binance servisinden gelen ham sonucu kaydet
+                # Ham sonucu kaydetmek için logger'ı kullanmaya devam edin
                 logger.info(f"Raw balance result from {exchange_name}: {result}")
                 
-                # *** YENİ HATA AYIKLAMA SATIRI ***
-                # Loglama yapılandırmasına bakılmaksızın ham sonucu konsola yazdırmak için print kullanıyoruz.
-                print(f"!!! DEBUG RAW RESULT FROM BINANCE: {result}")
-                # ********************************
+                # Hata ayıklama (print) satırı kaldırıldı.
 
             elif exchange_name == "bybit":
                 from backend.services import bybit_service
@@ -189,6 +186,7 @@ class UnifiedExchangeService:
                 raise ExchangeError(exchange_name, f"Unsupported exchange: {exchange_name}")
 
             # Normalize response
+            # Buradaki mantık, binance_service'den gelen normalleştirilmiş formata uymaktadır.
             normalized = {
                 "exchange": exchange_name,
                 "type": "futures" if is_futures else "spot",
