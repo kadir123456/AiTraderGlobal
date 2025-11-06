@@ -49,40 +49,7 @@ except ImportError:
 
 app = FastAPI(title="EMA Navigator AI Trading API")
 
-# Include routers
-if AUTO_TRADING_AVAILABLE:
-    app.include_router(auto_trading_router)
-
-# Include other routers with error handling
-try:
-    from backend.api.balance import router as balance_router
-    app.include_router(balance_router)
-    print("✅ Balance module loaded")
-except ImportError:
-    print("⚠️ Warning: Balance module not available")
-
-try:
-    from backend.api.payments import router as payments_router
-    app.include_router(payments_router)
-    print("✅ Payments module loaded")
-except ImportError:
-    print("⚠️ Warning: Payments module not available")
-
-try:
-    from backend.api.admin import router as admin_router
-    app.include_router(admin_router)
-    print("✅ Admin module loaded")
-except ImportError:
-    print("⚠️ Warning: Admin module not available")
-
-try:
-    from backend.api.transactions import router as transactions_router
-    app.include_router(transactions_router)
-    print("✅ Transactions module loaded")
-except ImportError:
-    print("⚠️ Warning: Transactions module not available")
-
-# CORS Configuration
+# CORS Configuration - Must be before router includes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -205,6 +172,45 @@ if AUTH_MODULE_AVAILABLE:
     get_current_user = auth_get_current_user
 else:
     get_current_user = get_current_user_fallback
+
+# Include routers
+if AUTO_TRADING_AVAILABLE:
+    app.include_router(auto_trading_router)
+
+# Include other routers with error handling
+try:
+    from backend.api.balance import router as balance_router
+    app.include_router(balance_router)
+    print("✅ Balance module loaded")
+except ImportError:
+    print("⚠️ Warning: Balance module not available")
+
+try:
+    from backend.api.payments import router as payments_router
+    app.include_router(payments_router)
+    print("✅ Payments module loaded")
+except ImportError:
+    print("⚠️ Warning: Payments module not available")
+
+try:
+    from backend.api.admin import router as admin_router
+    app.include_router(admin_router)
+    print("✅ Admin module loaded")
+except ImportError:
+    print("⚠️ Warning: Admin module not available")
+
+# ✅ FIXED: Transactions router with dependency override
+try:
+    from backend.api.transactions import router as transactions_router, get_current_user_stub
+    
+    # Dependency override to fix circular import
+    transactions_router.dependency_overrides[get_current_user_stub] = get_current_user
+    
+    # Include router with /api prefix
+    app.include_router(transactions_router, prefix="/api")
+    print("✅ Transactions module loaded")
+except ImportError as e:
+    print(f"⚠️ Warning: Transactions module not available - {e}")
 
 # Exchange API Helpers
 async def validate_binance_api(api_key: str, api_secret: str) -> bool:
