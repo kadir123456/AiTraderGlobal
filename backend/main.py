@@ -206,14 +206,9 @@ try:
 except ImportError:
     print("⚠️ Warning: Integrations module not available")
 
-# ✅ FIXED: Transactions router with dependency override
+# ✅ FIXED: Transactions router
 try:
-    from backend.api.transactions import router as transactions_router, get_current_user_dependency
-
-    # Dependency override to fix circular import
-    transactions_router.dependency_overrides[get_current_user_dependency] = get_current_user
-
-    # Include router with /api prefix
+    from backend.api.transactions import router as transactions_router
     app.include_router(transactions_router, prefix="/api")
     print("✅ Transactions module loaded")
 except ImportError as e:
