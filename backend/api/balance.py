@@ -1,5 +1,6 @@
 # Exchange Balance Endpoint - Firebase Version with Unified Service
-from fastapi import APIRouter, HTTPException, Depends
+# Updated: 2025-11-06 - Fixed auth dependency
+from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import Optional
 import logging
 
@@ -9,16 +10,59 @@ from backend.services.unified_exchange import unified_exchange, ExchangeError, A
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Dependency stub - will be overridden by main.py
-async def get_current_user_dependency(authorization: str = None):
-    """Stub for dependency injection"""
-    pass
+# Import auth function with fallback
+try:
+    from backend.auth import get_current_user
+except ImportError:
+    import jwt
+    import httpx
+    import os
+
+    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NTQzMjF4eXoiLCJlbWFpbCI6Imt1bGxhbmljaUBleGFtcGxlLmNvbSIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzYyNDM4MjMwLCJleHAiOjE3NjMwNDMwMzB9.3xp821UGnFcTUX4LJxjQI_Px6tcMgb9jbLxlmDbddP4")
+    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyDqAsiITYyPK9bTuGGz7aVBkZ7oLB2Kt3U")
+
+    async def get_current_user(authorization: str = Header(None)):
+        """Fallback authentication"""
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing authorization header")
+
+        token = authorization.replace("Bearer ", "")
+
+        # Try JWT first
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            return payload
+        except:
+            pass
+
+        # Try Firebase token
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={FIREBASE_API_KEY}",
+                    json={"idToken": token},
+                    timeout=10.0
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    users = data.get("users", [])
+                    if users:
+                        u = users[0]
+                        return {
+                            "user_id": u.get("localId"),
+                            "email": u.get("email"),
+                            "uid": u.get("localId")
+                        }
+        except:
+            pass
+
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.get("/api/bot/balance/{exchange}")
 async def get_exchange_balance(
     exchange: str,
     is_futures: bool = True,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Get balance from specific exchange (spot or futures)

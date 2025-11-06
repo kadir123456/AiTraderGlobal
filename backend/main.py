@@ -1,3 +1,4 @@
+# Last updated: 2025-11-06 17:21 - Fixed dependency_overrides
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -179,8 +180,7 @@ if AUTO_TRADING_AVAILABLE:
 
 # Include other routers with error handling
 try:
-    from backend.api.balance import router as balance_router, get_current_user_dependency as balance_dependency
-    balance_router.dependency_overrides[balance_dependency] = get_current_user
+    from backend.api.balance import router as balance_router
     app.include_router(balance_router)
     print("✅ Balance module loaded")
 except ImportError as e:
@@ -207,14 +207,9 @@ try:
 except ImportError:
     print("⚠️ Warning: Integrations module not available")
 
-# ✅ FIXED: Transactions router with dependency override
+# ✅ FIXED: Transactions router
 try:
-    from backend.api.transactions import router as transactions_router, get_current_user_dependency
-
-    # Dependency override to fix circular import
-    transactions_router.dependency_overrides[get_current_user_dependency] = get_current_user
-
-    # Include router with /api prefix
+    from backend.api.transactions import router as transactions_router
     app.include_router(transactions_router, prefix="/api")
     print("✅ Transactions module loaded")
 except ImportError as e:
