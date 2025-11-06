@@ -179,8 +179,7 @@ if AUTO_TRADING_AVAILABLE:
 
 # Include other routers with error handling
 try:
-    from backend.api.balance import router as balance_router, get_current_user_dependency as balance_dependency
-    balance_router.dependency_overrides[balance_dependency] = get_current_user
+    from backend.api.balance import router as balance_router
     app.include_router(balance_router)
     print("✅ Balance module loaded")
 except ImportError as e:
