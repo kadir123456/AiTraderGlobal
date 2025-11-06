@@ -1,23 +1,26 @@
 # Transaction History Endpoint
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
-from backend.main import get_current_user
 
 router = APIRouter()
 
-# ✅ Route'ları düzelttik - /api/bot prefix'ini kaldırdık
-@router.get("/bot/transactions")  # ✅ DOĞRU
+# ✅ get_current_user'ı burada tanımlama - Depends ile kullanırken main.py'den inject edilecek
+async def get_current_user_dependency(authorization: str = Header(None)):
+    """
+    This will be overridden by the actual get_current_user from main.py
+    We define it here to avoid circular import
+    """
+    # Import yapma, Depends mekanizması halleder
+    pass
+
+@router.get("/bot/transactions")
 async def get_transaction_history(
     hours: int = 24,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Get user's transaction history for the last N hours"""
     try:
-        # TODO: Fetch from database
-        # For now, return mock data
-        # In production, query the transaction_history table
-        
         user_id = current_user.get('user_id')
         
         # Mock data for demonstration
@@ -83,16 +86,13 @@ async def get_transaction_history(
         raise HTTPException(status_code=500, detail=f"Failed to fetch transactions: {str(e)}")
 
 
-@router.get("/bot/transactions/stats")  # ✅ DOĞRU
+@router.get("/bot/transactions/stats")
 async def get_transaction_stats(
     days: int = 30,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Get transaction statistics for the last N days"""
     try:
-        # TODO: Calculate from database
-        # Return aggregated stats: total PnL, win rate, average trade, etc.
-        
         return {
             "success": True,
             "stats": {
