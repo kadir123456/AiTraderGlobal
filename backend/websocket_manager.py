@@ -37,22 +37,27 @@ class ConnectionManager:
         logger.info(f"✅ New WebSocket connection. Active: {len(self.active_connections)}, Total: {self.total_connections}")
 
         # Send welcome message
-        await self.send_personal_message({
-            "type": "connection",
-            "status": "connected",
-            "message": "Connected to EMA Navigator signal stream",
-            "timestamp": datetime.utcnow().isoformat()
-        }, websocket)
+        try:
+            await websocket.send_json({
+                "type": "connection",
+                "status": "connected",
+                "message": "Connected to EMA Navigator signal stream",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send welcome message: {e}")
         
         # Start keep-alive task for this connection
         task = asyncio.create_task(self._keep_alive(websocket))
         self.keep_alive_tasks[websocket] = task
+        logger.info(f"🔄 Started keep-alive task for connection")
 
     async def _keep_alive(self, websocket: WebSocket) -> None:
         """Send periodic ping to keep connection alive"""
+        logger.info(f"📡 Keep-alive task started")
         try:
             while websocket in self.active_connections:
-                await asyncio.sleep(30)  # Ping every 30 seconds
+                await asyncio.sleep(25)  # Ping every 25 seconds
                 
                 if websocket in self.active_connections:
                     try:
@@ -60,17 +65,18 @@ class ConnectionManager:
                             "type": "ping",
                             "timestamp": datetime.utcnow().isoformat()
                         })
-                        logger.debug(f"📡 Sent ping to client")
+                        logger.info(f"📡 Sent ping to client")
                     except Exception as e:
-                        logger.error(f"Ping failed: {e}")
+                        logger.error(f"❌ Ping failed: {e}")
                         break
                         
         except asyncio.CancelledError:
-            logger.debug("Keep-alive task cancelled")
+            logger.info("Keep-alive task cancelled")
         except Exception as e:
             logger.error(f"Keep-alive error: {e}")
         finally:
             if websocket in self.active_connections:
+                logger.info("Keep-alive task ending, disconnecting client")
                 await self.disconnect(websocket)
 
     async def disconnect(self, websocket: WebSocket) -> None:
@@ -82,6 +88,10 @@ class ConnectionManager:
             task = self.keep_alive_tasks.pop(websocket)
             if not task.done():
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
                 
         logger.info(f"❌ WebSocket disconnected. Active: {len(self.active_connections)}")
 
@@ -164,3 +174,34 @@ class ConnectionManager:
 
 # Global singleton instance
 connection_manager = ConnectionManager()
+```
+
+---
+
+## 📝 **Değişiklikler**
+
+1. ✅ `logger.info()` eklendi - ping/pong loglarını görebilirsin
+2. ✅ `await asyncio.sleep(25)` - Her 25 saniyede ping
+3. ✅ Task cancellation düzeltildi
+4. ✅ Daha detaylı error logging
+
+---
+
+## 🚀 **Test Et**
+
+Deploy ettikten sonra backend loglarında şunları göreceksin:
+```
+✅ New WebSocket connection. Active: 1
+🔄 Started keep-alive task for connection
+📡 Keep-alive task started
+... (25 saniye sonra)
+📡 Sent ping to client
+... (25 saniye sonra)
+📡 Sent ping to client
+```
+
+Frontend console'da:
+```
+📡 Received server ping, sending pong
+📡 Sent ping
+📡 Received pong from server
