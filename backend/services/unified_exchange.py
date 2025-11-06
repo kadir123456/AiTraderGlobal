@@ -116,6 +116,11 @@ class UnifiedExchangeService:
     def __init__(self):
         self._last_request_time: Dict[str, float] = {}
         self._min_request_interval = 0.1  # 100ms between requests
+        
+        # YENİ: Bakiye önbelleği (cache) ve süresi eklendi.
+        # Kullanıcı talebi üzerine, aşırı yüklenmeyi önlemek için önbellek süresi 15 saniyeden 120 saniyeye (2 dakika) çıkarıldı.
+        self._balance_cache: Dict[str, Dict] = {}
+        self._cache_duration_seconds = 120 # Bakiye verilerini 120 saniye (2 dakika) boyunca önbellekte tut
 
     async def _rate_limit(self, exchange: str):
         """Apply rate limiting between requests"""
@@ -151,10 +156,23 @@ class UnifiedExchangeService:
             "timestamp": str (ISO)
         }
         """
+        exchange_name = str(exchange).lower()
+        # API anahtarı ve hesap tipine göre önbellek anahtarı oluştur
+        cache_key = f"{exchange_name}_{api_key}_{'futures' if is_futures else 'spot'}"
+
+        # 1. Önbellek kontrolü
+        cached_data = self._balance_cache.get(cache_key)
+        if cached_data:
+            cache_timestamp = cached_data.get("timestamp_fetch", 0)
+            # Eğer önbellek süresi dolmadıysa, önbellekten dön
+            if time.time() - cache_timestamp < self._cache_duration_seconds:
+                logger.info(f"Using cached balance for {exchange_name} ({['spot', 'futures'][is_futures]})")
+                return cached_data['data']
+
+        # Eğer önbellek yoksa veya süresi dolduysa, API limitini uygula ve sorgula
         await self._rate_limit(exchange)
 
         try:
-            exchange_name = str(exchange).lower()
             logger.info(f"Fetching balance from {exchange_name} ({['spot', 'futures'][is_futures]})")
 
             if exchange_name == "binance":
@@ -187,6 +205,7 @@ class UnifiedExchangeService:
 
             # Normalize response
             # Buradaki mantık, binance_service'den gelen normalleştirilmiş formata uymaktadır.
+            current_timestamp = datetime.utcnow().isoformat()
             normalized = {
                 "exchange": exchange_name,
                 "type": "futures" if is_futures else "spot",
@@ -194,13 +213,19 @@ class UnifiedExchangeService:
                 "total": float(result.get("total", 0)),
                 "available": float(result.get("available", 0)),
                 "locked": float(result.get("total", 0)) - float(result.get("available", 0)),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": current_timestamp
             }
 
             logger.info(
                 f"Balance fetched from {exchange_name}: "
                 f"{normalized['available']:.2f} {normalized['currency']} available"
             )
+            
+            # 2. Yeni veriyi önbelleğe kaydet
+            self._balance_cache[cache_key] = {
+                "timestamp_fetch": time.time(),
+                "data": normalized
+            }
 
             return normalized
 
