@@ -5,11 +5,15 @@
 const LEMONSQUEEZY_CONFIG = {
   storeId: '239668',
   apiUrl: 'https://aitraderglobal.onrender.com',
+  // TEST MODE: These are test variant IDs
+  // Replace with production IDs when going live
   variantIds: {
     free: '',
-    pro: '1075011',
-    enterprise: '1075030',
+    pro: '1075011',      // Test mode variant ID
+    enterprise: '1075030', // Test mode variant ID
   },
+  // NOTE: Make sure these variants exist in your LemonSqueezy dashboard
+  // and are in TEST mode, not LIVE mode
 };
 
 export interface LemonSqueezyConfig {
