@@ -1,5 +1,5 @@
 # Transaction History Endpoint
-# Updated: 2025-11-06 - Fixed auth dependency
+# Updated: 2025-11-06 - Fixed auth dependency error
 from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
@@ -129,7 +129,7 @@ async def get_transaction_history(
 @router.get("/bot/transactions/stats")
 async def get_transaction_stats(
     days: int = 30,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)  # ✅ FIXED: Changed from get_current_user_dependency
 ):
     """Get transaction statistics for the last N days"""
     try:
