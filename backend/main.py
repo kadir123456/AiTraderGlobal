@@ -623,6 +623,28 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
         "expires_at": None
     }
 
+@app.get("/api/bot/transactions")
+async def get_transactions(hours: int = 24, current_user: dict = Depends(get_current_user)):
+    """Get user's transaction history"""
+    try:
+        from backend.firebase_admin import get_user_trades
+        user_id = current_user.get("user_id") or current_user.get("id")
+
+        # Get trades from Firebase
+        trades = get_user_trades(user_id, hours)
+
+        return {
+            "transactions": trades,
+            "count": len(trades)
+        }
+    except Exception as e:
+        print(f"Error fetching transactions: {e}")
+        # Return empty list if error
+        return {
+            "transactions": [],
+            "count": 0
+        }
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
