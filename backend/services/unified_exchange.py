@@ -160,9 +160,14 @@ class UnifiedExchangeService:
             if exchange_name == "binance":
                 from backend.services import binance_service
                 result = await binance_service.get_balance(api_key, api_secret, is_futures)
+                
                 # Yeni log satırı: Binance servisinden gelen ham sonucu kaydet
-                # Log seviyesi DEBUG'dan INFO'ya yükseltildi
                 logger.info(f"Raw balance result from {exchange_name}: {result}")
+                
+                # *** YENİ HATA AYIKLAMA SATIRI ***
+                # Loglama yapılandırmasına bakılmaksızın ham sonucu konsola yazdırmak için print kullanıyoruz.
+                print(f"!!! DEBUG RAW RESULT FROM BINANCE: {result}")
+                # ********************************
 
             elif exchange_name == "bybit":
                 from backend.services import bybit_service
