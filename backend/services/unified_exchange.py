@@ -10,7 +10,7 @@ Provides a consistent interface for all exchange operations with:
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, Union # Union eklendi
 from datetime import datetime
 from functools import wraps
 
@@ -19,11 +19,18 @@ logger = logging.getLogger(__name__)
 
 class ExchangeError(Exception):
     """Base exception for exchange errors"""
-    def __init__(self, exchange: str, message: str, original_error: Optional[Exception] = None):
-        self.exchange = exchange
+    # DÜZELTME: exchange için Union[str, object] kullanıldı ve içeride güvenli kontrol eklendi.
+    # Bu, decoratorden yanlışlıkla 'self' nesnesinin geçirilmesi durumunda çökmeyi önler.
+    def __init__(self, exchange: Union[str, object], message: str, original_error: Optional[Exception] = None):
+        # Borsa adının string olduğundan emin olun, aksi takdirde "UNKNOWN" olarak ayarlanır.
+        exchange_name = str(exchange).lower() if isinstance(exchange, str) else "UNKNOWN"
+        
+        self.exchange = exchange_name
         self.message = message
         self.original_error = original_error
-        super().__init__(f"[{exchange.upper()}] {message}")
+        
+        # self.exchange'i (artık güvenli bir string) kullanarak mesajı oluşturun
+        super().__init__(f"[{self.exchange.upper()}] {message}")
 
 
 class RateLimitError(ExchangeError):
@@ -89,6 +96,8 @@ def retry_with_backoff(
                                 message=f"Rate limit exceeded after {max_retries} retries",
                                 original_error=e
                             )
+                        # ExchangeError sınıfındaki düzeltme sayesinde, args[0] 'self' olsa bile 
+                        # AttributeError almayacağız.
                         raise ExchangeError(
                             exchange=args[0] if args else "unknown",
                             message=f"Operation failed after {max_retries} retries: {str(e)}",
