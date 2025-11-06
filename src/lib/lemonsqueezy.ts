@@ -5,11 +5,15 @@
 const LEMONSQUEEZY_CONFIG = {
   storeId: '239668',
   apiUrl: 'https://aitraderglobal.onrender.com',
+  // TEST MODE: These are test variant IDs
+  // Replace with production IDs when going live
   variantIds: {
     free: '',
-    pro: '1075011',
-    enterprise: '1075030',
+    pro: '1075011',      // Test mode variant ID
+    enterprise: '1075030', // Test mode variant ID
   },
+  // NOTE: Make sure these variants exist in your LemonSqueezy dashboard
+  // and are in TEST mode, not LIVE mode
 };
 
 export interface LemonSqueezyConfig {
@@ -147,7 +151,8 @@ export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
     await initializeLemonSqueezy();
 
     // Build checkout URL with custom data
-    const checkoutUrl = `https://ema-navigator.lemonsqueezy.com/checkout/buy/${variantId}?` + 
+    // Note: Replace 'storename' with your actual LemonSqueezy store slug
+    const checkoutUrl = `https://aitraderglobal.lemonsqueezy.com/checkout/buy/${variantId}?` +
       `checkout[email]=${encodeURIComponent(options.email)}` +
       `&checkout[name]=${encodeURIComponent(options.name)}` +
       `&checkout[custom][user_email]=${encodeURIComponent(options.email)}`;
@@ -192,7 +197,7 @@ export const getCheckoutUrl = (planId: 'free' | 'pro' | 'enterprise', email: str
     return '#';
   }
 
-  const url = `https://ema-navigator.lemonsqueezy.com/checkout/buy/${variantId}?` +
+  const url = `https://aitraderglobal.lemonsqueezy.com/checkout/buy/${variantId}?` +
     `checkout[email]=${encodeURIComponent(email)}` +
     `&checkout[name]=${encodeURIComponent(name)}` +
     `&checkout[custom][user_email]=${encodeURIComponent(email)}`;

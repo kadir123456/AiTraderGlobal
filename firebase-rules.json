@@ -4,49 +4,45 @@
       "$uid": {
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid",
-        
+
         "email": {
           ".validate": "newData.isString()"
         },
-        
+
         "displayName": {
           ".validate": "newData.isString()"
         },
-        
+
         "createdAt": {
           ".validate": "newData.isString()"
         },
-        
+
         "api_keys": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid",
           "$exchangeId": {
-            ".validate": "newData.hasChildren(['api_key', 'api_secret', 'status']) && newData.child('api_key').isString() && newData.child('api_secret').isString() && newData.child('status').isString()"
+            ".validate": "newData.hasChildren(['api_key', 'api_secret', 'status'])"
           }
         },
-        
+
         "auto_trading": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid",
-          ".validate": "newData.hasChildren(['enabled', 'watchlist', 'interval', 'exchange'])",
           "enabled": {
             ".validate": "newData.isBoolean()"
-          },
-          "watchlist": {
-            ".validate": "newData.hasChildren()"
           }
         },
-        
+
         "profile": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid"
         },
-        
+
         "settings": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid"
         },
-        
+
         "positions": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid",
@@ -54,7 +50,7 @@
             ".validate": "newData.hasChildren(['symbol', 'type', 'entryPrice', 'amount', 'timestamp'])"
           }
         },
-        
+
         "trades": {
           ".read": "$uid === auth.uid",
           ".write": "$uid === auth.uid",
@@ -64,7 +60,7 @@
         }
       }
     },
-    
+
     "signals": {
       ".read": "auth != null",
       ".indexOn": ["user_id", "timestamp"],
@@ -74,15 +70,23 @@
         ".validate": "newData.hasChildren(['user_id', 'symbol', 'signal_type', 'timestamp'])"
       }
     },
-    
+
     "user_subscriptions": {
       "$uid": {
         ".read": "$uid === auth.uid || root.child('user_roles').child(auth.uid).child('role').val() === 'admin'",
-        ".write": "root.child('user_roles').child(auth.uid).child('role').val() === 'admin'",
-        ".validate": "newData.hasChildren(['tier', 'startDate', 'status'])"
+        ".write": "$uid === auth.uid || root.child('user_roles').child(auth.uid).child('role').val() === 'admin'"
       }
     },
-    
+
+    "subscriptions": {
+      ".read": "auth != null",
+      ".indexOn": ["user_email"],
+      "$email_key": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
     "user_roles": {
       "$uid": {
         ".read": "$uid === auth.uid || root.child('user_roles').child(auth.uid).child('role').val() === 'admin'",
@@ -95,7 +99,25 @@
         }
       }
     },
-    
+
+    "orders": {
+      ".read": "auth != null",
+      ".indexOn": ["user_email", "created_at"],
+      "$order_id": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "webhook_logs": {
+      ".read": "root.child('user_roles').child(auth.uid).child('role').val() === 'admin'",
+      ".write": true,
+      ".indexOn": ["timestamp", "event_type"],
+      "$log_id": {
+        ".validate": "newData.hasChildren(['timestamp', 'event_type'])"
+      }
+    },
+
     "public": {
       ".read": true,
       ".write": false,

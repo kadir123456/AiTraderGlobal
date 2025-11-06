@@ -179,11 +179,12 @@ if AUTO_TRADING_AVAILABLE:
 
 # Include other routers with error handling
 try:
-    from backend.api.balance import router as balance_router
+    from backend.api.balance import router as balance_router, get_current_user_dependency as balance_dependency
+    balance_router.dependency_overrides[balance_dependency] = get_current_user
     app.include_router(balance_router)
     print("✅ Balance module loaded")
-except ImportError:
-    print("⚠️ Warning: Balance module not available")
+except ImportError as e:
+    print(f"⚠️ Warning: Balance module not available - {e}")
 
 try:
     from backend.api.payments import router as payments_router
@@ -208,10 +209,10 @@ except ImportError:
 
 # ✅ FIXED: Transactions router with dependency override
 try:
-    from backend.api.transactions import router as transactions_router, get_current_user_stub
+    from backend.api.transactions import router as transactions_router, get_current_user_dependency
 
     # Dependency override to fix circular import
-    transactions_router.dependency_overrides[get_current_user_stub] = get_current_user
+    transactions_router.dependency_overrides[get_current_user_dependency] = get_current_user
 
     # Include router with /api prefix
     app.include_router(transactions_router, prefix="/api")
@@ -491,17 +492,94 @@ async def get_positions(current_user: dict = Depends(get_current_user), exchange
 
 @app.post("/api/bot/positions")
 async def create_position(position: PositionRequest, current_user: dict = Depends(get_current_user)):
-    """Create new trading position"""
-    return {
-        "message": "Position created successfully",
-        "position": {
-            "id": f"pos_{int(time.time())}",
-            "exchange": position.exchange,
-            "symbol": position.symbol,
-            "side": position.side,
-            "status": "open"
+    """Create new trading position (LONG/SHORT)"""
+    if not EXCHANGE_SERVICES_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Exchange services not available")
+
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        exchange = position.exchange.lower()
+
+        # Get API keys from Firebase
+        try:
+            from backend.firebase_admin import get_user_api_keys
+            api_keys = get_user_api_keys(user_id, exchange)
+            if not api_keys:
+                raise HTTPException(status_code=404, detail=f"API keys not found for {exchange}")
+
+            api_key = api_keys.get("api_key")
+            api_secret = api_keys.get("api_secret")
+            passphrase = api_keys.get("passphrase", position.passphrase or "")
+
+            if not api_key or not api_secret:
+                raise HTTPException(status_code=400, detail=f"Incomplete API credentials for {exchange}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to get API keys: {str(e)}")
+
+        # Create order based on exchange
+        order_result = None
+        order_side = "BUY" if position.side.upper() == "LONG" else "SELL"
+
+        if exchange == "binance":
+            order_result = await binance_service.create_order(
+                api_key, api_secret, position.symbol, order_side,
+                position.amount, position.leverage, position.is_futures,
+                position.tp_percentage, position.sl_percentage
+            )
+        elif exchange == "bybit":
+            order_result = await bybit_service.create_order(
+                api_key, api_secret, position.symbol, order_side,
+                position.amount, position.leverage, position.is_futures,
+                position.tp_percentage, position.sl_percentage
+            )
+        elif exchange == "okx":
+            order_result = await okx_service.create_order(
+                api_key, api_secret, position.symbol, order_side,
+                position.amount, position.leverage, position.is_futures, passphrase,
+                position.tp_percentage, position.sl_percentage
+            )
+        elif exchange == "kucoin":
+            order_result = await kucoin_service.create_order(
+                api_key, api_secret, position.symbol, order_side,
+                position.amount, position.leverage, position.is_futures, passphrase,
+                position.tp_percentage, position.sl_percentage
+            )
+        elif exchange == "mexc":
+            order_result = await mexc_service.create_order(
+                api_key, api_secret, position.symbol, order_side,
+                position.amount, position.leverage, position.is_futures,
+                position.tp_percentage, position.sl_percentage
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
+
+        if not order_result:
+            raise HTTPException(status_code=500, detail="Order creation failed")
+
+        return {
+            "success": True,
+            "message": "Position created successfully",
+            "position": {
+                "id": str(order_result.get("orderId", f"pos_{int(time.time())}")),
+                "exchange": exchange,
+                "symbol": position.symbol,
+                "side": position.side,
+                "amount": position.amount,
+                "leverage": position.leverage,
+                "tp_percentage": position.tp_percentage,
+                "sl_percentage": position.sl_percentage,
+                "status": "open",
+                "timestamp": int(time.time())
+            },
+            "order_details": order_result
         }
-    }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create position: {str(e)}")
 
 @app.delete("/api/bot/positions/{position_id}")
 async def close_position(position_id: str, current_user: dict = Depends(get_current_user)):
@@ -622,6 +700,28 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
         "status": "active",
         "expires_at": None
     }
+
+@app.get("/api/bot/transactions")
+async def get_transactions(hours: int = 24, current_user: dict = Depends(get_current_user)):
+    """Get user's transaction history"""
+    try:
+        from backend.firebase_admin import get_user_trades
+        user_id = current_user.get("user_id") or current_user.get("id")
+
+        # Get trades from Firebase
+        trades = get_user_trades(user_id, hours)
+
+        return {
+            "transactions": trades,
+            "count": len(trades)
+        }
+    except Exception as e:
+        print(f"Error fetching transactions: {e}")
+        # Return empty list if error
+        return {
+            "transactions": [],
+            "count": 0
+        }
 
 if __name__ == "__main__":
     import uvicorn
