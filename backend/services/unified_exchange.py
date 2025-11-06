@@ -145,35 +145,35 @@ class UnifiedExchangeService:
         await self._rate_limit(exchange)
 
         try:
-            exchange = exchange.lower()
-            logger.info(f"Fetching balance from {exchange} ({['spot', 'futures'][is_futures]})")
+            exchange_name = str(exchange).lower()
+            logger.info(f"Fetching balance from {exchange_name} ({['spot', 'futures'][is_futures]})")
 
-            if exchange == "binance":
+            if exchange_name == "binance":
                 from backend.services import binance_service
                 result = await binance_service.get_balance(api_key, api_secret, is_futures)
 
-            elif exchange == "bybit":
+            elif exchange_name == "bybit":
                 from backend.services import bybit_service
                 result = await bybit_service.get_balance(api_key, api_secret, is_futures)
 
-            elif exchange == "okx":
+            elif exchange_name == "okx":
                 from backend.services import okx_service
                 result = await okx_service.get_balance(api_key, api_secret, is_futures, passphrase)
 
-            elif exchange == "kucoin":
+            elif exchange_name == "kucoin":
                 from backend.services import kucoin_service
                 result = await kucoin_service.get_balance(api_key, api_secret, is_futures, passphrase)
 
-            elif exchange == "mexc":
+            elif exchange_name == "mexc":
                 from backend.services import mexc_service
                 result = await mexc_service.get_balance(api_key, api_secret, is_futures)
 
             else:
-                raise ExchangeError(exchange, f"Unsupported exchange: {exchange}")
+                raise ExchangeError(exchange_name, f"Unsupported exchange: {exchange_name}")
 
             # Normalize response
             normalized = {
-                "exchange": exchange,
+                "exchange": exchange_name,
                 "type": "futures" if is_futures else "spot",
                 "currency": result.get("currency", "USDT"),
                 "total": float(result.get("total", 0)),
@@ -183,7 +183,7 @@ class UnifiedExchangeService:
             }
 
             logger.info(
-                f"Balance fetched from {exchange}: "
+                f"Balance fetched from {exchange_name}: "
                 f"{normalized['available']:.2f} {normalized['currency']} available"
             )
 
@@ -192,9 +192,9 @@ class UnifiedExchangeService:
         except ExchangeError:
             raise
         except Exception as e:
-            exchange_name = exchange if isinstance(exchange, str) else "unknown"
-            logger.error(f"Balance fetch failed for {exchange_name}: {str(e)}")
-            raise ExchangeError(exchange_name, f"Failed to fetch balance: {str(e)}", e)
+            safe_exchange = str(exchange).lower() if exchange else "unknown"
+            logger.error(f"Balance fetch failed for {safe_exchange}: {str(e)}")
+            raise ExchangeError(safe_exchange, f"Failed to fetch balance: {str(e)}", e)
 
     @retry_with_backoff(max_retries=3)
     async def get_current_price(
@@ -220,33 +220,33 @@ class UnifiedExchangeService:
         await self._rate_limit(exchange)
 
         try:
-            exchange = exchange.lower()
+            exchange_name = str(exchange).lower()
 
-            if exchange == "binance":
+            if exchange_name == "binance":
                 from backend.services import binance_service
                 price = await binance_service.get_current_price(api_key, api_secret, symbol, is_futures)
 
-            elif exchange == "bybit":
+            elif exchange_name == "bybit":
                 from backend.services import bybit_service
                 price = await bybit_service.get_current_price(api_key, api_secret, symbol, is_futures)
 
-            elif exchange == "okx":
+            elif exchange_name == "okx":
                 from backend.services import okx_service
                 price = await okx_service.get_current_price(api_key, api_secret, symbol, is_futures, passphrase)
 
-            elif exchange == "kucoin":
+            elif exchange_name == "kucoin":
                 from backend.services import kucoin_service
                 price = await kucoin_service.get_current_price(api_key, api_secret, symbol, is_futures, passphrase)
 
-            elif exchange == "mexc":
+            elif exchange_name == "mexc":
                 from backend.services import mexc_service
                 price = await mexc_service.get_current_price(api_key, api_secret, symbol, is_futures)
 
             else:
-                raise ExchangeError(exchange, f"Unsupported exchange: {exchange}")
+                raise ExchangeError(exchange_name, f"Unsupported exchange: {exchange_name}")
 
             return {
-                "exchange": exchange,
+                "exchange": exchange_name,
                 "symbol": symbol,
                 "price": float(price),
                 "timestamp": datetime.utcnow().isoformat()
@@ -255,8 +255,9 @@ class UnifiedExchangeService:
         except ExchangeError:
             raise
         except Exception as e:
-            logger.error(f"Price fetch failed for {exchange} {symbol}: {str(e)}")
-            raise ExchangeError(exchange, f"Failed to fetch price for {symbol}: {str(e)}", e)
+            safe_exchange = str(exchange).lower() if exchange else "unknown"
+            logger.error(f"Price fetch failed for {safe_exchange} {symbol}: {str(e)}")
+            raise ExchangeError(safe_exchange, f"Failed to fetch price for {symbol}: {str(e)}", e)
 
     @retry_with_backoff(max_retries=2)
     async def get_positions(
@@ -286,36 +287,36 @@ class UnifiedExchangeService:
         await self._rate_limit(exchange)
 
         try:
-            exchange = exchange.lower()
+            exchange_name = str(exchange).lower()
 
-            if exchange == "binance":
+            if exchange_name == "binance":
                 from backend.services import binance_service
                 positions = await binance_service.get_positions(api_key, api_secret, is_futures)
 
-            elif exchange == "bybit":
+            elif exchange_name == "bybit":
                 from backend.services import bybit_service
                 positions = await bybit_service.get_positions(api_key, api_secret, is_futures)
 
-            elif exchange == "okx":
+            elif exchange_name == "okx":
                 from backend.services import okx_service
                 positions = await okx_service.get_positions(api_key, api_secret, is_futures, passphrase)
 
-            elif exchange == "kucoin":
+            elif exchange_name == "kucoin":
                 from backend.services import kucoin_service
                 positions = await kucoin_service.get_positions(api_key, api_secret, is_futures, passphrase)
 
-            elif exchange == "mexc":
+            elif exchange_name == "mexc":
                 from backend.services import mexc_service
                 positions = await mexc_service.get_positions(api_key, api_secret, is_futures)
 
             else:
-                raise ExchangeError(exchange, f"Unsupported exchange: {exchange}")
+                raise ExchangeError(exchange_name, f"Unsupported exchange: {exchange_name}")
 
             # Normalize positions
             normalized = []
             for pos in positions:
                 normalized.append({
-                    "exchange": exchange,
+                    "exchange": exchange_name,
                     "symbol": pos.get("symbol"),
                     "side": pos.get("side"),
                     "amount": float(pos.get("amount", 0)),
@@ -326,14 +327,15 @@ class UnifiedExchangeService:
                     "timestamp": datetime.utcnow().isoformat()
                 })
 
-            logger.info(f"Fetched {len(normalized)} open positions from {exchange}")
+            logger.info(f"Fetched {len(normalized)} open positions from {exchange_name}")
             return normalized
 
         except ExchangeError:
             raise
         except Exception as e:
-            logger.error(f"Positions fetch failed for {exchange}: {str(e)}")
-            raise ExchangeError(exchange, f"Failed to fetch positions: {str(e)}", e)
+            safe_exchange = str(exchange).lower() if exchange else "unknown"
+            logger.error(f"Positions fetch failed for {safe_exchange}: {str(e)}")
+            raise ExchangeError(safe_exchange, f"Failed to fetch positions: {str(e)}", e)
 
 
 # Singleton instance

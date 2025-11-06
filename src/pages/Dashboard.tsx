@@ -21,6 +21,7 @@ import { LiveSignalIndicator } from "@/components/LiveSignalIndicator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -196,6 +197,35 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* User Info - For Admin Setup */}
+        {user && (
+          <Card className="border-border bg-card/50 backdrop-blur-sm mb-4">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">User ID:</span>
+                  <code className="bg-muted px-2 py-1 rounded font-mono">{user.uid}</code>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2"
+                    onClick={() => {
+                      navigator.clipboard.writeText(user.uid);
+                      toast.success('User ID copied!');
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Email:</span>
+                  <span className="font-medium">{user.email}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* How to Use */}
         <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
           <CardHeader>

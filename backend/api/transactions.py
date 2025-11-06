@@ -129,7 +129,7 @@ async def get_transaction_history(
 @router.get("/bot/transactions/stats")
 async def get_transaction_stats(
     days: int = 30,
-    current_user: dict = Depends(get_current_user)  # ← BU SATIR DÜZELTİLDİ
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Get transaction statistics for the last N days"""
     try:

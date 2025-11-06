@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Shield, Users, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { AdminRoleManager } from '@/components/AdminRoleManager';
 
 const Admin = () => {
   const { t } = useTranslation();
@@ -105,6 +106,11 @@ const Admin = () => {
               <p className="text-muted-foreground mt-1">{t('admin.subtitle')}</p>
             </div>
           </div>
+        </div>
+
+        {/* Admin Role Manager */}
+        <div className="mb-8">
+          <AdminRoleManager onRoleAssigned={loadUsers} />
         </div>
 
         {/* Stats */}
