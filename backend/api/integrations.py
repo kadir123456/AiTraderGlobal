@@ -1,19 +1,109 @@
 """
-Exchange Integration Health Check API
-Provides health status for all exchange connections
+Exchange Integration API
+- Health checks for all exchanges
+- API key management (add/remove/list)
 """
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 import asyncio
 import logging
 
 from backend.auth import get_current_user
-from backend.firebase_admin import get_user_api_keys, get_all_user_exchanges
+from backend.firebase_admin import get_user_api_keys, get_all_user_exchanges, save_user_api_keys, delete_user_api_keys
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/integrations", tags=["integrations"])
+router = APIRouter(prefix="/api", tags=["integrations"])
 
+
+# Models
+class APIKeyInput(BaseModel):
+    exchange: str
+    api_key: str
+    api_secret: str
+    passphrase: Optional[str] = None
+    is_futures: bool = True
+
+
+# ==================== API KEY MANAGEMENT ====================
+
+@router.post("/user/api-keys")
+async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_current_user)):
+    """
+    Add exchange API keys
+    This is the endpoint your frontend is calling
+    """
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        exchange = api_input.exchange.lower()
+
+        # Save to Firebase
+        saved = save_user_api_keys(
+            user_id=user_id,
+            exchange=exchange,
+            api_key=api_input.api_key,
+            api_secret=api_input.api_secret,
+            passphrase=api_input.passphrase or "",
+            is_futures=api_input.is_futures
+        )
+
+        if not saved:
+            raise HTTPException(status_code=500, detail="Failed to save API keys")
+
+        logger.info(f"✅ API keys saved for {exchange} - User: {user_id}")
+
+        return {
+            "success": True,
+            "message": f"{exchange.capitalize()} API key stored successfully",
+            "exchange": exchange,
+            "status": "connected"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding API key: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add API key: {str(e)}")
+
+
+@router.get("/user/api-keys")
+async def get_api_keys(current_user: dict = Depends(get_current_user)):
+    """Get user's connected exchanges"""
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        exchanges = get_all_user_exchanges(user_id)
+        
+        return {
+            "success": True,
+            "exchanges": exchanges
+        }
+    except Exception as e:
+        logger.error(f"Error fetching API keys: {str(e)}")
+        return {
+            "success": True,
+            "exchanges": []
+        }
+
+
+@router.delete("/user/api-keys/{exchange_id}")
+async def remove_api_key(exchange_id: str, current_user: dict = Depends(get_current_user)):
+    """Remove exchange API key"""
+    try:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        deleted = delete_user_api_keys(user_id, exchange_id)
+        
+        return {
+            "success": True,
+            "message": f"Exchange {exchange_id} removed successfully",
+            "deleted": deleted
+        }
+    except Exception as e:
+        logger.error(f"Error removing API key: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== HEALTH CHECKS ====================
 
 async def check_exchange_health(
     exchange: str,
@@ -38,7 +128,6 @@ async def check_exchange_health(
 
         if exchange == "binance":
             from backend.services import binance_service
-            # Try to fetch server time (lightweight endpoint)
             await binance_service.get_balance(api_key, api_secret, is_futures=True)
 
         elif exchange == "bybit":
@@ -76,31 +165,10 @@ async def check_exchange_health(
     return result
 
 
-@router.get("/health")
+@router.get("/integrations/health")
 async def get_integrations_health(current_user: dict = Depends(get_current_user)):
     """
     Get health status for all user's connected exchanges
-
-    Returns:
-    {
-        "timestamp": "2025-11-06T...",
-        "user_id": "...",
-        "exchanges": [
-            {
-                "exchange": "binance",
-                "connected": true,
-                "last_ping": "2025-11-06T...",
-                "error": null,
-                "response_time_ms": 234
-            },
-            ...
-        ],
-        "summary": {
-            "total": 5,
-            "connected": 4,
-            "failed": 1
-        }
-    }
     """
     try:
         user_id = current_user.get("user_id") or current_user.get("id")
@@ -177,14 +245,12 @@ async def get_integrations_health(current_user: dict = Depends(get_current_user)
         )
 
 
-@router.get("/health/{exchange}")
+@router.get("/integrations/health/{exchange}")
 async def get_single_exchange_health(
     exchange: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Get health status for a specific exchange
-    """
+    """Get health status for a specific exchange"""
     try:
         user_id = current_user.get("user_id") or current_user.get("id")
         exchange = exchange.lower()
@@ -218,7 +284,7 @@ async def get_single_exchange_health(
         )
 
 
-@router.post("/test-connection")
+@router.post("/integrations/test-connection")
 async def test_exchange_connection(
     exchange: str,
     api_key: str,
