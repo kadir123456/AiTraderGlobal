@@ -1,4 +1,4 @@
-# Last updated: 2025-11-06 17:21 - Fixed dependency_overrides
+# Last updated: 2025-11-06 20:30 - Fixed integrations routing
 from fastapi import FastAPI, HTTPException, Depends, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -91,13 +91,6 @@ class UserRegister(BaseModel):
     email: str
     password: str
     full_name: Optional[str] = None
-
-class APIKeyInput(BaseModel):
-    exchange: str
-    api_key: str
-    api_secret: str
-    passphrase: Optional[str] = None
-    is_futures: bool = True
 
 class EMARequest(BaseModel):
     exchange: str
@@ -212,11 +205,10 @@ except ImportError:
 try:
     from backend.api.integrations import router as integrations_router
     app.include_router(integrations_router)
-    print("✅ Integrations module loaded")
+    print("✅ Integrations module loaded (includes API key management)")
 except ImportError:
     print("⚠️ Warning: Integrations module not available")
 
-# ✅ FIXED: Transactions router
 try:
     from backend.api.transactions import router as transactions_router
     app.include_router(transactions_router, prefix="/api")
@@ -389,100 +381,6 @@ async def login(user: UserLogin):
         }
     }
 
-# API Key Management
-@app.post("/api/user/api-keys")
-async def add_api_key(api_input: APIKeyInput, current_user: dict = Depends(get_current_user)):
-    """Add and validate exchange API key"""
-    try:
-        from backend.firebase_admin import save_user_api_keys, get_user_subscription, get_all_user_exchanges
-        firebase_available = True
-    except ImportError:
-        firebase_available = False
-        print("⚠️ Firebase admin not available, using mock storage")
-
-    # Check subscription plan and exchange limits
-    if firebase_available:
-        user_id = current_user.get("user_id")
-        subscription = get_user_subscription(user_id)
-        user_tier = subscription.get('tier', 'free') if subscription else 'free'
-
-        # Get current exchanges count
-        current_exchanges = get_all_user_exchanges(user_id)
-        exchange_count = len(current_exchanges)
-
-        # Free plan: 1 exchange only
-        if user_tier == 'free' and exchange_count >= 1:
-            raise HTTPException(
-                status_code=403,
-                detail="Exchange limit reached. Free plan allows 1 exchange. Upgrade to Pro for unlimited exchanges."
-            )
-
-    exchange = api_input.exchange.lower()
-    
-    # Validate API credentials
-    is_valid = False
-    try:
-        if exchange == "binance":
-            is_valid = await validate_binance_api(api_input.api_key, api_input.api_secret)
-        elif exchange == "bybit":
-            is_valid = await validate_bybit_api(api_input.api_key, api_input.api_secret)
-        elif exchange == "okx":
-            is_valid = await validate_okx_api(api_input.api_key, api_input.api_secret)
-        elif exchange in ["kucoin", "mexc"]:
-            is_valid = True
-        else:
-            raise HTTPException(status_code=400, detail=f"Exchange {exchange} not supported")
-    except Exception as e:
-        print(f"Validation error: {e}")
-        raise HTTPException(status_code=400, detail=f"API validation failed: {str(e)}")
-    
-    if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid API credentials")
-    
-    # Save to Firebase or mock
-    saved = False
-    if firebase_available:
-        saved = save_user_api_keys(
-            user_id=current_user.get("user_id"),
-            exchange=exchange,
-            api_key=api_input.api_key,
-            api_secret=api_input.api_secret,
-            passphrase=api_input.passphrase or "",
-            is_futures=api_input.is_futures
-        )
-    else:
-        saved = True
-        print(f"Mock: API keys saved for {exchange}")
-    
-    return {
-        "message": f"{exchange.capitalize()} API key validated and stored successfully",
-        "exchange": exchange,
-        "status": "connected",
-        "saved": saved
-    }
-
-@app.get("/api/user/api-keys")
-async def get_api_keys(current_user: dict = Depends(get_current_user)):
-    """Get user's connected exchanges"""
-    try:
-        from backend.firebase_admin import get_all_user_exchanges
-        exchanges = get_all_user_exchanges(current_user.get("user_id"))
-    except ImportError:
-        exchanges = []
-    
-    return {"exchanges": exchanges}
-
-@app.delete("/api/user/api-keys/{exchange_id}")
-async def remove_api_key(exchange_id: str, current_user: dict = Depends(get_current_user)):
-    """Remove exchange API key"""
-    try:
-        from backend.firebase_admin import delete_user_api_keys
-        deleted = delete_user_api_keys(current_user.get("user_id"), exchange_id)
-    except ImportError:
-        deleted = True
-    
-    return {"message": "Exchange removed successfully", "deleted": deleted}
-
 @app.post("/api/bot/ema-signal")
 async def get_ema_signal(request: EMARequest, current_user: dict = Depends(get_current_user)):
     """Get EMA signal for trading pair"""
@@ -593,13 +491,13 @@ async def close_position(position_id: str, current_user: dict = Depends(get_curr
         "position_id": position_id
     }
 
-# Payment Webhook - FIXED VERSION
+# Payment Webhook
 @app.post("/api/payments/webhook")
 async def payment_webhook(payload: dict):
     """Handle LemonSqueezy webhooks"""
     try:
         # Log webhook data
-        print("🔔 Webhook received:")
+        print("📦 Webhook received:")
         print(json.dumps(payload, indent=2))
         
         # LemonSqueezy webhook events
@@ -709,7 +607,7 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
 async def websocket_signals(websocket: WebSocket):
     """
     WebSocket endpoint for broadcasting trading signals to all connected clients
-    Supports 1000+ concurrent connections
+    Supports 1000+ concurrent connections with keep-alive
     """
     if not WEBSOCKET_AVAILABLE:
         await websocket.close(code=1011, reason="WebSocket not available")
@@ -718,15 +616,18 @@ async def websocket_signals(websocket: WebSocket):
     await connection_manager.connect(websocket)
 
     try:
-        # Keep connection alive and listen for ping/pong
+        # Keep connection alive and listen for messages
         while True:
             try:
-                # Wait for messages (ping/pong to keep connection alive)
+                # Wait for messages (client can send ping/pong)
                 data = await websocket.receive_text()
 
-                # Handle ping/pong
+                # Handle client ping
                 if data == "ping":
                     await websocket.send_text("pong")
+                elif data == "pong":
+                    # Client responded to our ping
+                    pass
 
             except WebSocketDisconnect:
                 break
@@ -735,7 +636,7 @@ async def websocket_signals(websocket: WebSocket):
                 break
 
     finally:
-        connection_manager.disconnect(websocket)
+        await connection_manager.disconnect(websocket)
 
 @app.get("/ws/stats")
 async def websocket_stats():
