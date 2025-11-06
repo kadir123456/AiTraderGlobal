@@ -5,19 +5,58 @@ from datetime import datetime, timedelta
 
 router = APIRouter()
 
-# ✅ get_current_user'ı burada tanımlama - Depends ile kullanırken main.py'den inject edilecek
-async def get_current_user_dependency(authorization: str = Header(None)):
-    """
-    This will be overridden by the actual get_current_user from main.py
-    We define it here to avoid circular import
-    """
-    # Import yapma, Depends mekanizması halleder
-    pass
+# Import auth function with fallback (same as balance.py)
+try:
+    from backend.auth import get_current_user
+except ImportError:
+    import jwt
+    import httpx
+    import os
+
+    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyDqAsiITYyPK9bTuGGz7aVBkZ7oLB2Kt3U")
+
+    async def get_current_user(authorization: str = Header(None)):
+        """Fallback authentication"""
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing authorization header")
+
+        token = authorization.replace("Bearer ", "")
+
+        # Try JWT first
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            return payload
+        except:
+            pass
+
+        # Try Firebase token
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={FIREBASE_API_KEY}",
+                    json={"idToken": token},
+                    timeout=10.0
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    users = data.get("users", [])
+                    if users:
+                        u = users[0]
+                        return {
+                            "user_id": u.get("localId"),
+                            "email": u.get("email"),
+                            "uid": u.get("localId")
+                        }
+        except:
+            pass
+
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.get("/bot/transactions")
 async def get_transaction_history(
     hours: int = 24,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get user's transaction history for the last N hours"""
     try:
