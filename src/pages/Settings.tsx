@@ -15,6 +15,9 @@ import { database } from "@/lib/firebase";
 import ExchangeList from "@/components/ExchangeList";
 import { IPWhitelistCard } from "@/components/IPWhitelistCard";
 import { AutoTradingToggle } from "@/components/AutoTradingToggle";
+import { ProFeature, PremiumFeature } from "@/components/FeatureGuard";
+import { CustomStrategyBuilder } from "@/components/CustomStrategyBuilder";
+import { ArbitrageScanner } from "@/components/ArbitrageScanner";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 const Settings = () => {
@@ -77,21 +80,27 @@ const Settings = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="exchanges" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-8 h-auto">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 mb-8 h-auto">
             <TabsTrigger value="exchanges" className="whitespace-normal text-xs sm:text-sm">
               🏦 Borsalar
             </TabsTrigger>
             <TabsTrigger value="trading" className="whitespace-normal text-xs sm:text-sm">
-              📊 Manuel İşlem Ayarları
+              📊 Manuel İşlem
             </TabsTrigger>
             <TabsTrigger value="auto-trading" className="whitespace-normal text-xs sm:text-sm">
               🤖 Otomatik Al-Sat
             </TabsTrigger>
+            <TabsTrigger value="custom-strategies" className="whitespace-normal text-xs sm:text-sm">
+              ⚡ Özel Stratejiler
+            </TabsTrigger>
+            <TabsTrigger value="arbitrage" className="whitespace-normal text-xs sm:text-sm">
+              📈 Arbitraj
+            </TabsTrigger>
             <TabsTrigger value="subscription" className="whitespace-normal text-xs sm:text-sm">
-              💎 Abonelik Paketim
+              💎 Paketim
             </TabsTrigger>
             <TabsTrigger value="profile" className="whitespace-normal text-xs sm:text-sm">
-              👤 Profil Bilgilerim
+              👤 Profil
             </TabsTrigger>
           </TabsList>
 
@@ -220,8 +229,54 @@ const Settings = () => {
                 </div>
               </CardContent>
             </Card>
-            
-            <AutoTradingToggle />
+
+            <ProFeature feature="Otomatik Trading Botu">
+              <AutoTradingToggle />
+            </ProFeature>
+          </TabsContent>
+
+          {/* Custom Strategies Tab */}
+          <TabsContent value="custom-strategies">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">⚡ Özel Stratejiler</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Kendi trading stratejilerinizi oluşturun. İstediğiniz göstergeleri seçin ve
+                    alım-satım kurallarınızı belirleyin.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💎 Bu özellik sadece <strong>Enterprise</strong> paketinde mevcuttur.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <PremiumFeature feature="Özel Strateji Oluşturucu">
+              <CustomStrategyBuilder />
+            </PremiumFeature>
+          </TabsContent>
+
+          {/* Arbitrage Tab */}
+          <TabsContent value="arbitrage">
+            <Card className="border-primary/20 bg-primary/5 mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">📈 Arbitraj Tarayıcı</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Borsalar arasındaki fiyat farklarını tespit edin ve arbitraj fırsatlarından kar edin.
+                    Sistem otomatik olarak tüm borsalarınızı tarar.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💎 Bu özellik sadece <strong>Enterprise</strong> paketinde mevcuttur.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <PremiumFeature feature="Arbitraj Modülü">
+              <ArbitrageScanner />
+            </PremiumFeature>
           </TabsContent>
 
           {/* Subscription Tab */}

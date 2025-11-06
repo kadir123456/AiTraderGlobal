@@ -24,8 +24,9 @@ export const useExchanges = () => {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const exchangeLimit = tier === 'free' ? 1 : tier === 'pro' ? 5 : 999;
-  const canAddMore = exchanges.length < exchangeLimit;
+  // Exchange limits per plan: Free = 1, Pro = unlimited, Enterprise = unlimited
+  const exchangeLimit = tier === 'free' ? 1 : -1; // -1 means unlimited
+  const canAddMore = exchangeLimit === -1 || exchanges.length < exchangeLimit;
 
   useEffect(() => {
     if (!user) {
@@ -51,6 +52,12 @@ export const useExchanges = () => {
 
   const addExchange = async ({ name, apiKey, apiSecret, passphrase }: AddExchangeParams) => {
     if (!user) throw new Error('User not authenticated');
+
+    // Check exchange limit before adding
+    if (!canAddMore) {
+      throw new Error(`Exchange limit reached. Your ${tier} plan allows ${exchangeLimit} exchange${exchangeLimit === 1 ? '' : 's'}.`);
+    }
+
     await exchangeAPI.addApiKey(name, apiKey, apiSecret, passphrase);
     const response = await exchangeAPI.getApiKeys();
     setExchanges(response.data.exchanges || []);

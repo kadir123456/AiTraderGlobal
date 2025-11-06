@@ -62,6 +62,7 @@ export const exchangeAPI = {
   
   getApiKeys: () => api.get('/api/user/api-keys'),
   
+  // ❌ HATA BURADAYDI: Backtick yerine parantez kullanılmalı
   removeApiKey: (exchangeId: string) =>
     api.delete(`/api/user/api-keys/${exchangeId}`),
 };
@@ -89,6 +90,9 @@ export const botAPI = {
       tp_percentage: tpPercentage,
       sl_percentage: slPercentage,
     }),
+  
+  closePosition: (positionId: string) =>
+    api.delete(`/api/bot/positions/${positionId}`),
 };
 
 // Payment API

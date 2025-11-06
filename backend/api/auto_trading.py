@@ -48,10 +48,21 @@ async def update_auto_trading_settings(
 ):
     """Update user's auto-trading settings"""
     try:
-        from backend.firebase_admin import save_auto_trading_settings, get_user_api_keys
-        
+        from backend.firebase_admin import save_auto_trading_settings, get_user_api_keys, get_user_subscription
+
         user_id = current_user.get('user_id') or current_user.get('id')
-        
+
+        # Check subscription plan - Auto-trading requires Pro or Enterprise
+        if settings.enabled:
+            subscription = get_user_subscription(user_id)
+            user_tier = subscription.get('tier', 'free') if subscription else 'free'
+
+            if user_tier == 'free':
+                raise HTTPException(
+                    status_code=403,
+                    detail="Auto-trading is a PRO feature. Please upgrade your plan to use this feature."
+                )
+
         # Validate exchange API keys exist
         if settings.enabled:
             api_keys = get_user_api_keys(user_id, settings.exchange)
