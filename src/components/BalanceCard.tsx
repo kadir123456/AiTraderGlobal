@@ -50,9 +50,19 @@ export const BalanceCard = ({
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
-          <div className="flex items-start gap-2 text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <span>{error}</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start gap-2 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium mb-1">Bakiye Alınamadı</p>
+                <p className="text-xs opacity-80">{error}</p>
+                {error.includes('IP restriction') && (
+                  <p className="text-xs mt-2 text-muted-foreground">
+                    💡 Sunucu IP'si engellenmiş olabilir. Binance API anahtarlarınızı kontrol edin.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         ) : (
           <>

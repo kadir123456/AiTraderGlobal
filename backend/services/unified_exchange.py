@@ -192,8 +192,9 @@ class UnifiedExchangeService:
         except ExchangeError:
             raise
         except Exception as e:
-            logger.error(f"Balance fetch failed for {exchange}: {str(e)}")
-            raise ExchangeError(exchange, f"Failed to fetch balance: {str(e)}", e)
+            exchange_name = exchange if isinstance(exchange, str) else "unknown"
+            logger.error(f"Balance fetch failed for {exchange_name}: {str(e)}")
+            raise ExchangeError(exchange_name, f"Failed to fetch balance: {str(e)}", e)
 
     @retry_with_backoff(max_retries=3)
     async def get_current_price(

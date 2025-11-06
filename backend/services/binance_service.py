@@ -38,15 +38,27 @@ class BinanceService:
             params["signature"] = self._generate_signature(params)
             
             headers = {
-                "X-MBX-APIKEY": self.api_key
+                "X-MBX-APIKEY": self.api_key,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
             }
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
+
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 response = await client.get(
                     f"{base_url}{endpoint}",
                     params=params,
                     headers=headers
                 )
+
+                # Handle 418 IP ban specifically
+                if response.status_code == 418:
+                    raise Exception(
+                        "Binance IP restriction detected. Your server's IP may be blocked. "
+                        "Try: 1) Use a VPS with different IP, 2) Enable Binance IP whitelist, "
+                        "3) Contact Binance support, or 4) Wait 24 hours for auto-unblock."
+                    )
+
                 response.raise_for_status()
                 data = response.json()
                 
