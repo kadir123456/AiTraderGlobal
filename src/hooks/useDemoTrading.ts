@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { database } from "@/lib/firebase";
 import { ref, set } from "firebase/database";
-import { v4 as uuidv4 } from "uuid";
 
 /**
  * Lightweight demo runner helper (client-side)
@@ -9,13 +8,33 @@ import { v4 as uuidv4 } from "uuid";
  * - Writes occasional simulated closed trades to trades/{userId}/{tradeId}
  *
  * NOTE: For production-grade demo, move simulation to a backend worker.
+ *
+ * This version avoids the 'uuid' dependency by using crypto.randomUUID() when available,
+ * falling back to a secure-ish random string if not.
  */
+
+const makeId = (): string => {
+  try {
+    // browser/node modern API
+    // @ts-ignore - some TS libs may not include crypto.randomUUID in DOM lib
+    if (typeof crypto !== "undefined" && typeof (crypto as any).randomUUID === "function") {
+      // crypto.randomUUID() returns a UUID v4 string
+      // prepend timestamp for readability/ordering
+      return `${new Date().toISOString()}-${(crypto as any).randomUUID()}`;
+    }
+  } catch (e) {
+    // ignore and fallback
+  }
+
+  // Fallback: timestamp + random string
+  return `${new Date().toISOString()}-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 const useDemoTrading = () => {
   const openDemoAutoTrading = useCallback(
     async ({ userId, symbol, market, startingBalance = 10000 }: any) => {
       if (!userId) throw new Error("User required");
-      const id = `${new Date().toISOString()}-${uuidv4()}`;
+      const id = makeId();
       const rec = {
         id,
         userId,
@@ -28,14 +47,16 @@ const useDemoTrading = () => {
       await set(ref(database, `demo_auto_trades/${userId}/${id}`), rec);
 
       // Simulate a few trades shortly after (simple, client-side)
+      // In production, move simulation to backend worker for reliability.
       setTimeout(async () => {
         try {
-          const tradeId = `${new Date().toISOString()}-${uuidv4()}`;
+          const tradeId = makeId();
           const side = Math.random() > 0.5 ? "buy" : "sell";
-          const price = +(100 + Math.random() * 50).toFixed(2); // fake price
+          // Generate a reasonable fake price and quantity
+          const price = +(100 + Math.random() * 50).toFixed(2);
           const quantity = +(0.001 + Math.random() * 0.05).toFixed(6);
           const quoteAmount = +(price * quantity).toFixed(2);
-          const pnl = +( (Math.random() - 0.5) * quoteAmount * 0.02 ).toFixed(4);
+          const pnl = +(((Math.random() - 0.5) * quoteAmount * 0.02).toFixed(4));
 
           const tradeRec = {
             id: tradeId,
