@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs";
 import { Activity, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSubscription } from "@/hooks/useSubscription";
 import { toast } from "sonner";
 import { ref, set } from "firebase/database";
@@ -25,6 +25,7 @@ const Settings = () => {
   const { user } = useAuth();
   const { tier, plan } = useSubscription();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Trading Settings
   const [defaultTP, setDefaultTP] = useState("2.0");
@@ -32,6 +33,20 @@ const Settings = () => {
   const [riskPerTrade, setRiskPerTrade] = useState("2");
   const [maxPositions, setMaxPositions] = useState("3");
   const [defaultLeverage, setDefaultLeverage] = useState("10");
+
+  // Controlled tab value driven by query param ?tab=
+  const [selectedTab, setSelectedTab] = useState<string>(() => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    return params.get('tab') || 'exchanges';
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab) {
+      setSelectedTab(tab);
+    }
+  }, [location.search]);
 
   const handleSaveSettings = async () => {
     if (!user) return;
@@ -79,32 +94,16 @@ const Settings = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="exchanges" className="w-full">
+        <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v)} className="w-full">
+          {/* TabsList intentionally does NOT include the moved quick-access tabs.
+              Navigation to those is now provided from Dashboard (e.g. /settings?tab=exchanges). */}
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 mb-8 h-auto">
-            <TabsTrigger value="exchanges" className="whitespace-normal text-xs sm:text-sm">
-              🏦 Borsalar
-            </TabsTrigger>
-            <TabsTrigger value="trading" className="whitespace-normal text-xs sm:text-sm">
-              📊 Manuel İşlem
-            </TabsTrigger>
-            <TabsTrigger value="auto-trading" className="whitespace-normal text-xs sm:text-sm">
-              🤖 Otomatik Al-Sat
-            </TabsTrigger>
-            <TabsTrigger value="custom-strategies" className="whitespace-normal text-xs sm:text-sm">
-              ⚡ Özel Stratejiler
-            </TabsTrigger>
-            <TabsTrigger value="arbitrage" className="whitespace-normal text-xs sm:text-sm">
-              📈 Arbitraj
-            </TabsTrigger>
-            <TabsTrigger value="subscription" className="whitespace-normal text-xs sm:text-sm">
-              💎 Paketim
-            </TabsTrigger>
-            <TabsTrigger value="profile" className="whitespace-normal text-xs sm:text-sm">
-              👤 Profil
-            </TabsTrigger>
+            {/* Other settings triggers (if any other internal triggers exist) can stay here.
+                The following main user-facing triggers were moved to Dashboard and therefore removed:
+                - exchanges, trading, auto-trading, custom-strategies, arbitrage, subscription, profile */}
           </TabsList>
 
-          {/* Exchanges Tab */}
+          {/* Exchanges Tab (content remains, accessible via ?tab=exchanges or directly) */}
           <TabsContent value="exchanges" className="space-y-6">
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="pt-6">
