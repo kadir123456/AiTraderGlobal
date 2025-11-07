@@ -114,6 +114,17 @@ const Dashboard = () => {
     }
   }, [refreshBalances]);
 
+  // Quick links to moved settings tabs
+  const quickLinks = [
+    { key: 'exchanges', label: '🏦 Borsalar', icon: <Wallet className="h-5 w-5 text-primary" />, to: '/settings?tab=exchanges' },
+    { key: 'trading', label: '📊 Manuel İşlem', icon: <TrendingUp className="h-5 w-5 text-primary" />, to: '/settings?tab=trading' },
+    { key: 'auto-trading', label: '🤖 Otomatik Al-Sat', icon: <RefreshCw className="h-5 w-5 text-primary" />, to: '/settings?tab=auto-trading' },
+    { key: 'custom-strategies', label: '⚡ Özel Stratejiler', icon: <BarChart3 className="h-5 w-5 text-primary" />, to: '/settings?tab=custom-strategies' },
+    { key: 'arbitrage', label: '📈 Arbitraj', icon: <Activity className="h-5 w-5 text-primary" />, to: '/settings?tab=arbitrage' },
+    { key: 'subscription', label: '💎 Paketim', icon: <DollarSign className="h-5 w-5 text-primary" />, to: '/settings?tab=subscription' },
+    { key: 'profile', label: '👤 Profil', icon: <Menu className="h-5 w-5 text-primary" />, to: '/settings?tab=profile' },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -278,6 +289,29 @@ const Dashboard = () => {
               <StatsCard key={stat.label} {...stat} />
             ))
           )}
+        </div>
+
+        {/* Quick Access Grid (moved from Settings) */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Hızlı Erişim</h3>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {quickLinks.map(link => (
+              <div
+                key={link.key}
+                role="button"
+                onClick={() => navigate(link.to)}
+                className="cursor-pointer rounded-lg border border-border bg-card/60 p-4 flex flex-col items-start gap-3 hover:shadow-lg transition-shadow"
+              >
+                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-primary/10 text-primary">
+                  {link.icon}
+                </div>
+                <div className="text-sm font-medium">{link.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Exchange Balances */}
