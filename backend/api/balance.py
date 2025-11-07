@@ -1,5 +1,5 @@
 # Exchange Balance Endpoint - Firebase Version with Unified Service
-# Updated: 2025-11-06 - Fixed auth dependency
+# Updated: 2025-11-07 - Added user_id to cache key
 from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import Optional
 import logging
@@ -58,6 +58,7 @@ except ImportError:
 
         raise HTTPException(status_code=401, detail="Invalid token")
 
+
 @router.get("/api/bot/balance/{exchange}")
 async def get_exchange_balance(
     exchange: str,
@@ -92,13 +93,14 @@ async def get_exchange_balance(
                 detail=f"Incomplete API credentials for {exchange}"
             )
 
-        # Use unified exchange service
+        # ✅ Use unified exchange service with user_id parameter
         balance = await unified_exchange.get_balance(
             exchange=exchange,
             api_key=api_key,
             api_secret=api_secret,
             is_futures=is_futures,
-            passphrase=passphrase
+            passphrase=passphrase,
+            user_id=user_id  # ✅ NEW: Pass user_id for cache key
         )
 
         # Transform to frontend format
