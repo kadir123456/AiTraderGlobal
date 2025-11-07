@@ -5,7 +5,7 @@ Provides a consistent interface for all exchange operations with:
 - Rate limiting
 - Error normalization
 - Logging
-- User-based caching
+- User-based caching with detailed debug logs
 """
 
 import asyncio
@@ -116,6 +116,8 @@ class UnifiedExchangeService:
         # ✅ Balance cache with user-based keys
         self._balance_cache: Dict[str, Dict] = {}
         self._cache_duration_seconds = 120  # Cache balance data for 120 seconds (2 minutes)
+        
+        logger.info("🔧 UnifiedExchangeService initialized with 120s cache duration")
 
     async def _rate_limit(self, exchange: str):
         """Apply rate limiting between requests"""
@@ -153,29 +155,46 @@ class UnifiedExchangeService:
         }
         """
         exchange_name = str(exchange).lower()
+        account_type = 'futures' if is_futures else 'spot'
         
         # ✅ Create cache key using user_id (instead of api_key)
-        cache_key = f"{user_id or 'anonymous'}_{exchange_name}_{'futures' if is_futures else 'spot'}"
+        cache_key = f"{user_id or 'anonymous'}_{exchange_name}_{account_type}"
 
-        # 1. Check cache
+        # 1. ✅ Check cache with detailed logging
         cached_data = self._balance_cache.get(cache_key)
         if cached_data:
             cache_timestamp = cached_data.get("timestamp_fetch", 0)
+            cache_age = int(time.time() - cache_timestamp)
+            
             # If cache is still valid, return cached data
             if time.time() - cache_timestamp < self._cache_duration_seconds:
-                logger.info(f"Using cached balance for {exchange_name} (user: {user_id})")
+                logger.info(
+                    f"✅ CACHE HIT | Exchange: {exchange_name} | User: {user_id} | "
+                    f"Type: {account_type} | Age: {cache_age}s / Max: {self._cache_duration_seconds}s"
+                )
                 return cached_data['data']
+            else:
+                logger.info(
+                    f"⏰ CACHE EXPIRED | Exchange: {exchange_name} | User: {user_id} | "
+                    f"Type: {account_type} | Age: {cache_age}s (expired)"
+                )
+
+        # 2. ✅ Cache miss - fetch from API
+        logger.info(
+            f"🔄 CACHE MISS | Exchange: {exchange_name} | User: {user_id} | "
+            f"Type: {account_type} | Fetching from API..."
+        )
 
         # If no cache or expired, apply rate limit and fetch from API
         await self._rate_limit(exchange_name)
 
         try:
-            logger.info(f"Fetching balance from {exchange_name} ({['spot', 'futures'][is_futures]}) for user: {user_id}")
+            logger.info(f"📡 API REQUEST | {exchange_name} ({account_type}) for user: {user_id}")
 
             if exchange_name == "binance":
                 from backend.services import binance_service
                 result = await binance_service.get_balance(api_key, api_secret, is_futures)
-                logger.info(f"Raw balance result from {exchange_name}: {result}")
+                logger.info(f"📥 RAW RESPONSE | {exchange_name}: {result}")
 
             elif exchange_name == "bybit":
                 from backend.services import bybit_service
@@ -200,7 +219,7 @@ class UnifiedExchangeService:
             current_timestamp = datetime.utcnow().isoformat()
             normalized = {
                 "exchange": exchange_name,
-                "type": "futures" if is_futures else "spot",
+                "type": account_type,
                 "currency": result.get("currency", "USDT"),
                 "total": float(result.get("total", 0)),
                 "available": float(result.get("available", 0)),
@@ -209,15 +228,20 @@ class UnifiedExchangeService:
             }
 
             logger.info(
-                f"Balance fetched from {exchange_name}: "
-                f"{normalized['available']:.2f} {normalized['currency']} available (user: {user_id})"
+                f"✅ BALANCE FETCHED | {exchange_name} ({account_type}) | "
+                f"User: {user_id} | Available: {normalized['available']:.2f} {normalized['currency']}"
             )
             
-            # 2. ✅ Store new data in cache
+            # 3. ✅ Store new data in cache
             self._balance_cache[cache_key] = {
                 "timestamp_fetch": time.time(),
                 "data": normalized
             }
+            
+            logger.info(
+                f"💾 CACHED | {exchange_name} ({account_type}) | User: {user_id} | "
+                f"Expires in: {self._cache_duration_seconds}s"
+            )
 
             return normalized
 
@@ -225,7 +249,7 @@ class UnifiedExchangeService:
             raise
         except Exception as e:
             safe_exchange = str(exchange).lower() if exchange else "unknown"
-            logger.error(f"Balance fetch failed for {safe_exchange}: {str(e)}")
+            logger.error(f"❌ BALANCE FETCH FAILED | {safe_exchange} | User: {user_id} | Error: {str(e)}")
             raise ExchangeError(safe_exchange, f"Failed to fetch balance: {str(e)}", e)
 
     @retry_with_backoff(max_retries=3)
