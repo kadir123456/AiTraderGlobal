@@ -13,6 +13,9 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { botAPI } from '@/lib/api';
 import { TPSLCalculator } from './TPSLCalculator';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/hooks/useSubscription';
+import useDemoTrading from '@/hooks/useDemoTrading';
 
 interface Coin {
   symbol: string;
@@ -25,6 +28,10 @@ export const TradingForm = () => {
   const { exchanges } = useExchanges();
   const { openPosition, canOpenMore, maxPositions } = useTrading();
   const { settings } = useTradingSettings();
+  const { user } = useAuth();
+  const { tier } = useSubscription();
+  const demoMode = tier === 'free';
+  const { openDemoAutoTrading } = useDemoTrading();
   
   const [selectedExchange, setSelectedExchange] = useState<string>('');
   const [selectedCoin, setSelectedCoin] = useState<string>('');
@@ -147,6 +154,20 @@ export const TradingForm = () => {
         }
       }
 
+      // If demo mode (free user) -> simulate by demo runner
+      if (demoMode && user?.uid) {
+        await openDemoAutoTrading({
+          userId: user.uid,
+          symbol: selectedCoin,
+          market: 'spot',
+          startingBalance: 10000,
+        });
+        toast.success('Demo pozisyon açıldı (simülasyon).');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Real openPosition: amount should be base quantity
       await openPosition({
         exchange: exchange.name.toLowerCase(),
         symbol: selectedCoin,
