@@ -1,4 +1,4 @@
-# backend/services/ema_monitor_firebase.py - FIXED & COMPLETE
+# backend/services/ema_monitor.py - FIXED & COMPLETE
 
 """
 EMA Signal Monitoring Service - Firebase Integrated
@@ -24,7 +24,7 @@ from backend.services.trade_manager import trade_manager
 logger = logging.getLogger(__name__)
 
 
-class EMAMonitorFirebase:
+class EMAMonitor:
     """Monitors EMA signals for automated trading with Firebase integration"""
 
     def __init__(self):
@@ -328,7 +328,7 @@ class EMAMonitorFirebase:
 
     async def auto_open_position(self, user_id: str, signal: Dict, user_settings: Dict):
         """
-        ✅ OTOMATTK AL-SAT
+        ✅ OTOMATİK AL-SAT
         Automatically open position based on signal using TradeManager
         """
         try:
@@ -370,5 +370,70 @@ class EMAMonitorFirebase:
             )
 
             logger.info(f"✅ Position opened: {order_result.get('trade_id')}")
+            return order_result
 
-            # Update signal
+        except Exception as e:
+            logger.error(f"❌ Error auto-opening position: {e}")
+            return None
+
+    async def start_monitoring(self, user_id: str, config: Dict):
+        """Start monitoring EMA signals for a user"""
+        task_key = f"{user_id}_{config['symbol']}_{config['interval']}"
+        
+        if task_key in self.monitoring_tasks:
+            logger.warning(f"Monitoring already active for {task_key}")
+            return
+
+        async def monitor_loop():
+            while True:
+                try:
+                    signal = await self.check_ema_signal(
+                        user_id=user_id,
+                        exchange_name=config['exchange'],
+                        api_key=config['api_key'],
+                        api_secret=config['api_secret'],
+                        symbol=config['symbol'],
+                        interval=config['interval'],
+                        passphrase=config.get('passphrase', '')
+                    )
+
+                    if signal and signal['signal'] and config.get('auto_trade', False):
+                        await self.auto_open_position(user_id, signal, config)
+
+                    await asyncio.sleep(60)  # Check every minute
+                except asyncio.CancelledError:
+                    logger.info(f"Monitoring cancelled for {task_key}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in monitoring loop: {e}")
+                    await asyncio.sleep(60)
+
+        task = asyncio.create_task(monitor_loop())
+        self.monitoring_tasks[task_key] = task
+        logger.info(f"✅ Started monitoring {task_key}")
+
+    async def stop_monitoring(self, user_id: str, symbol: str, interval: str):
+        """Stop monitoring for a specific configuration"""
+        task_key = f"{user_id}_{symbol}_{interval}"
+        
+        if task_key in self.monitoring_tasks:
+            self.monitoring_tasks[task_key].cancel()
+            del self.monitoring_tasks[task_key]
+            logger.info(f"🛑 Stopped monitoring {task_key}")
+
+    async def stop_all_monitoring(self, user_id: str):
+        """Stop all monitoring tasks for a user"""
+        tasks_to_cancel = [
+            key for key in self.monitoring_tasks.keys() 
+            if key.startswith(user_id)
+        ]
+        
+        for task_key in tasks_to_cancel:
+            self.monitoring_tasks[task_key].cancel()
+            del self.monitoring_tasks[task_key]
+        
+        logger.info(f"🛑 Stopped all monitoring for user {user_id}")
+
+
+# Global instance
+ema_monitor = EMAMonitor()
