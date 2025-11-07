@@ -14,7 +14,7 @@ import { ref, set } from "firebase/database";
 import { database } from "@/lib/firebase";
 import ExchangeList from "@/components/ExchangeList";
 import { IPWhitelistCard } from "@/components/IPWhitelistCard";
-import { AutoTradingToggle } from "@/components/AutoTradingToggle";
+import AutoTradingToggle from "@/components/AutoTradingToggle";
 import { ProFeature, PremiumFeature } from "@/components/FeatureGuard";
 import { CustomStrategyBuilder } from "@/components/CustomStrategyBuilder";
 import { ArbitrageScanner } from "@/components/ArbitrageScanner";
