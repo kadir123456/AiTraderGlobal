@@ -172,14 +172,15 @@ class BinanceService:
             current_price = await self.get_current_price(symbol, is_futures)
             print(f"[BINANCE] Current price: {current_price:.4f} USDT")
             
-            # ✅ 2. CALCULATE QUANTITY (USDT -> Coin amount)
-            quantity = amount / current_price
-            print(f"[BINANCE] Raw quantity: {quantity:.8f} {symbol_info.get('baseAsset', 'coins')}")
-            
-            # ✅ 3. GET SYMBOL INFO FOR PRECISION
+            # ✅ 2. GET SYMBOL INFO FOR PRECISION
             symbol_info = await self.get_symbol_info(symbol, is_futures)
             step_size = symbol_info.get("stepSize", 0.001)
             min_qty = symbol_info.get("minQty", 0)
+            base_asset = symbol_info.get("baseAsset", "coins")
+            
+            # ✅ 3. CALCULATE QUANTITY (USDT -> Coin amount)
+            quantity = amount / current_price
+            print(f"[BINANCE] Raw quantity: {quantity:.8f} {base_asset}")
             
             # ✅ 4. ROUND QUANTITY TO STEP SIZE
             quantity = self._round_quantity(quantity, step_size)
