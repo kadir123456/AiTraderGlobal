@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu, Shield, Wallet } from "lucide-react";
@@ -36,12 +36,18 @@ const Dashboard = () => {
       navigate('/auth', { replace: true });
     }
   }, [user, authLoading, navigate]);
+
   const { positions, loading: positionsLoading, refreshPositions } = useTrading();
   const { plan, loading: planLoading } = useSubscription();
   const { exchanges, loading: exchangesLoading } = useExchanges();
   const [accountType, setAccountType] = useState<'spot' | 'futures'>('futures');
   
-  const exchangeNames = exchanges.map(ex => ex.name);
+  // ✅ exchangeNames memoize edildi - Gereksiz re-render önlendi
+  const exchangeNames = useMemo(() => {
+    return exchanges.map(ex => ex.name);
+  }, [exchanges]);
+
+  // ✅ useBalance hook'u sadece exchangeNames değiştiğinde tetiklenir
   const { balances, loading: balancesLoading, refreshBalances } = useBalance(exchangeNames, accountType === 'futures');
 
   // Auto-refresh positions every 30 seconds
@@ -59,8 +65,6 @@ const Dashboard = () => {
       ? positions.reduce((sum, pos) => sum + (pos.pnlPercent || 0), 0) / positions.length 
       : 0;
 
-    // TODO: Get real balance from exchange API
-    // For now showing PnL only (balance would come from /api/bot/balance endpoint)
     const displayBalance = totalPnL;
 
     return [
@@ -99,6 +103,16 @@ const Dashboard = () => {
     await logout();
     navigate('/');
   };
+
+  // ✅ Refresh fonksiyonu - toast bildirimi eklendi
+  const handleRefreshBalances = useCallback(async () => {
+    try {
+      await refreshBalances();
+      toast.success('Bakiyeler güncellendi');
+    } catch (error) {
+      toast.error('Bakiyeler güncellenirken hata oluştu');
+    }
+  }, [refreshBalances]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -284,7 +298,7 @@ const Dashboard = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => refreshBalances()}
+                  onClick={handleRefreshBalances}
                   disabled={balancesLoading}
                 >
                   <RefreshCw className={`h-4 w-4 ${balancesLoading ? 'animate-spin' : ''}`} />
