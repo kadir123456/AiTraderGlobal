@@ -103,6 +103,53 @@ class BinanceService:
         except Exception as e:
             raise Exception(f"Binance price error: {str(e)}")
     
+    async def get_symbol_info(self, symbol: str, is_futures: bool = False) -> Dict:
+        """Get symbol trading rules (lot size, price precision, etc.)"""
+        try:
+            base_url = self._get_base_url(is_futures)
+            endpoint = "/fapi/v1/exchangeInfo" if is_futures else "/api/v3/exchangeInfo"
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{base_url}{endpoint}")
+                response.raise_for_status()
+                data = response.json()
+                
+                # Find symbol info
+                for s in data.get("symbols", []):
+                    if s["symbol"] == symbol:
+                        # Extract filters
+                        lot_size_filter = next((f for f in s["filters"] if f["filterType"] == "LOT_SIZE"), None)
+                        price_filter = next((f for f in s["filters"] if f["filterType"] == "PRICE_FILTER"), None)
+                        
+                        return {
+                            "symbol": symbol,
+                            "status": s.get("status"),
+                            "baseAsset": s.get("baseAsset"),
+                            "quoteAsset": s.get("quoteAsset"),
+                            "minQty": float(lot_size_filter.get("minQty", 0)) if lot_size_filter else 0,
+                            "maxQty": float(lot_size_filter.get("maxQty", 0)) if lot_size_filter else 0,
+                            "stepSize": float(lot_size_filter.get("stepSize", 0)) if lot_size_filter else 0,
+                            "tickSize": float(price_filter.get("tickSize", 0)) if price_filter else 0,
+                        }
+                
+                raise Exception(f"Symbol {symbol} not found")
+                
+        except Exception as e:
+            raise Exception(f"Binance symbol info error: {str(e)}")
+    
+    def _round_quantity(self, quantity: float, step_size: float) -> float:
+        """Round quantity to match exchange's step size"""
+        if step_size == 0:
+            return round(quantity, 8)
+        
+        precision = 0
+        temp_step = step_size
+        while temp_step < 1:
+            temp_step *= 10
+            precision += 1
+        
+        return round(quantity - (quantity % step_size), precision)
+    
     async def create_order(
         self,
         symbol: str,
@@ -118,8 +165,33 @@ class BinanceService:
             base_url = self._get_base_url(is_futures)
             headers = {"X-MBX-APIKEY": self.api_key}
             
-            print(f"[BINANCE] Creating order: {side} {amount} {symbol}")
+            print(f"[BINANCE] Creating order: {side} {amount} USDT worth of {symbol}")
             print(f"[BINANCE] Futures: {is_futures}, Leverage: {leverage}x")
+            
+            # ✅ 1. GET CURRENT PRICE
+            current_price = await self.get_current_price(symbol, is_futures)
+            print(f"[BINANCE] Current price: {current_price:.4f} USDT")
+            
+            # ✅ 2. GET SYMBOL INFO FOR PRECISION
+            symbol_info = await self.get_symbol_info(symbol, is_futures)
+            step_size = symbol_info.get("stepSize", 0.001)
+            min_qty = symbol_info.get("minQty", 0)
+            base_asset = symbol_info.get("baseAsset", "coins")
+            
+            # ✅ 3. CALCULATE QUANTITY (USDT -> Coin amount)
+            quantity = amount / current_price
+            print(f"[BINANCE] Raw quantity: {quantity:.8f} {base_asset}")
+            
+            # ✅ 4. ROUND QUANTITY TO STEP SIZE
+            quantity = self._round_quantity(quantity, step_size)
+            print(f"[BINANCE] Rounded quantity: {quantity:.8f} (step: {step_size})")
+            
+            # ✅ 5. VALIDATE MINIMUM QUANTITY
+            if quantity < min_qty:
+                raise Exception(
+                    f"Order quantity {quantity} is below minimum {min_qty} for {symbol}. "
+                    f"Increase order amount (minimum ~{min_qty * current_price:.2f} USDT)"
+                )
             
             if is_futures:
                 # Set leverage first
@@ -131,22 +203,25 @@ class BinanceService:
                 leverage_params["signature"] = self._generate_signature(leverage_params)
                 
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    await client.post(
+                    lev_response = await client.post(
                         f"{base_url}/fapi/v1/leverage",
                         data=leverage_params,
                         headers=headers
                     )
+                    lev_response.raise_for_status()
                     print(f"[BINANCE] Leverage set to {leverage}x")
                 
-                # Create futures market order
+                # ✅ Create futures market order with CORRECT QUANTITY
                 order_params = {
                     "symbol": symbol,
-                    "side": side,
+                    "side": side.upper(),
                     "type": "MARKET",
-                    "quantity": amount,
+                    "quantity": quantity,  # ✅ NOW USING COIN AMOUNT, NOT USD
                     "timestamp": int(time.time() * 1000)
                 }
                 order_params["signature"] = self._generate_signature(order_params)
+                
+                print(f"[BINANCE] Sending order: {order_params}")
                 
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
@@ -154,42 +229,51 @@ class BinanceService:
                         data=order_params,
                         headers=headers
                     )
-                    response.raise_for_status()
+                    
+                    # ✅ DETAILED ERROR LOGGING
+                    if response.status_code != 200:
+                        error_data = response.json() if response.text else {}
+                        print(f"[BINANCE ERROR] Status: {response.status_code}")
+                        print(f"[BINANCE ERROR] Response: {error_data}")
+                        print(f"[BINANCE ERROR] Message: {error_data.get('msg', 'Unknown error')}")
+                        response.raise_for_status()
+                    
                     order_result = response.json()
                     print(f"[BINANCE] Order created: {order_result.get('orderId')}")
                 
                 # Get entry price
                 entry_price = float(order_result.get("avgPrice", 0))
                 if entry_price == 0:
-                    entry_price = await self.get_current_price(symbol, is_futures)
+                    entry_price = current_price
                 
                 # Create TP/SL orders if specified
                 tp_order_id = None
                 sl_order_id = None
                 
                 if tp_percentage > 0:
-                    tp_price = entry_price * (1 + tp_percentage / 100) if side == "BUY" else entry_price * (1 - tp_percentage / 100)
-                    tp_order_id = await self._create_tp_sl_order(symbol, "TAKE_PROFIT_MARKET", amount, tp_price, side, is_futures)
-                    print(f"[BINANCE] TP order created at {tp_price}: {tp_order_id}")
+                    tp_price = entry_price * (1 + tp_percentage / 100) if side.upper() == "BUY" else entry_price * (1 - tp_percentage / 100)
+                    tp_order_id = await self._create_tp_sl_order(symbol, "TAKE_PROFIT_MARKET", quantity, tp_price, side, is_futures)
+                    print(f"[BINANCE] TP order created at {tp_price:.2f} USDT: {tp_order_id}")
                 
                 if sl_percentage > 0:
-                    sl_price = entry_price * (1 - sl_percentage / 100) if side == "BUY" else entry_price * (1 + sl_percentage / 100)
-                    sl_order_id = await self._create_tp_sl_order(symbol, "STOP_MARKET", amount, sl_price, side, is_futures)
-                    print(f"[BINANCE] SL order created at {sl_price}: {sl_order_id}")
+                    sl_price = entry_price * (1 - sl_percentage / 100) if side.upper() == "BUY" else entry_price * (1 + sl_percentage / 100)
+                    sl_order_id = await self._create_tp_sl_order(symbol, "STOP_MARKET", quantity, sl_price, side, is_futures)
+                    print(f"[BINANCE] SL order created at {sl_price:.2f} USDT: {sl_order_id}")
                 
                 return {
                     **order_result,
                     "tp_order_id": tp_order_id,
                     "sl_order_id": sl_order_id,
-                    "entry_price": entry_price
+                    "entry_price": entry_price,
+                    "quantity": quantity
                 }
             else:
-                # Spot order
+                # ✅ Spot order with correct quantity
                 order_params = {
                     "symbol": symbol,
-                    "side": side,
+                    "side": side.upper(),
                     "type": "MARKET",
-                    "quantity": amount,
+                    "quantity": quantity,  # ✅ NOW USING COIN AMOUNT
                     "timestamp": int(time.time() * 1000)
                 }
                 order_params["signature"] = self._generate_signature(order_params)
@@ -200,36 +284,49 @@ class BinanceService:
                         data=order_params,
                         headers=headers
                     )
-                    response.raise_for_status()
+                    
+                    if response.status_code != 200:
+                        error_data = response.json() if response.text else {}
+                        print(f"[BINANCE ERROR] Status: {response.status_code}")
+                        print(f"[BINANCE ERROR] Response: {error_data}")
+                        response.raise_for_status()
+                    
                     order_result = response.json()
                     print(f"[BINANCE] Spot order created: {order_result.get('orderId')}")
                     return order_result
                      
+        except httpx.HTTPStatusError as e:
+            error_detail = e.response.json() if e.response.text else {}
+            print(f"[BINANCE ERROR] HTTP {e.response.status_code}: {error_detail}")
+            raise Exception(f"Binance order error: {error_detail.get('msg', str(e))}")
         except Exception as e:
             print(f"[BINANCE ERROR] Order failed: {str(e)}")
             raise Exception(f"Binance order error: {str(e)}")
     
-    async def _create_tp_sl_order(self, symbol: str, order_type: str, amount: float, trigger_price: float, original_side: str, is_futures: bool) -> Optional[str]:
+    async def _create_tp_sl_order(self, symbol: str, order_type: str, quantity: float, trigger_price: float, original_side: str, is_futures: bool) -> Optional[str]:
         """Create TP or SL order for futures"""
         try:
             base_url = self._get_base_url(is_futures)
             
             # Close side is opposite of open side
-            close_side = "SELL" if original_side == "BUY" else "BUY"
+            close_side = "SELL" if original_side.upper() == "BUY" else "BUY"
+            
+            # Get symbol info for price precision
+            symbol_info = await self.get_symbol_info(symbol, is_futures)
+            tick_size = symbol_info.get("tickSize", 0.01)
+            
+            # Round trigger price
+            trigger_price = round(trigger_price / tick_size) * tick_size
             
             params = {
                 "symbol": symbol,
                 "side": close_side,
                 "type": order_type,
-                "quantity": amount,
-                "stopPrice": round(trigger_price, 2),
+                "quantity": quantity,
+                "stopPrice": trigger_price,
+                "workingType": "MARK_PRICE",
                 "timestamp": int(time.time() * 1000)
             }
-            
-            if order_type == "TAKE_PROFIT_MARKET":
-                params["workingType"] = "MARK_PRICE"
-            else:
-                params["workingType"] = "MARK_PRICE"
             
             params["signature"] = self._generate_signature(params)
             
@@ -399,3 +496,7 @@ async def get_positions(api_key: str, api_secret: str, is_futures: bool = False)
 async def get_current_price(api_key: str, api_secret: str, symbol: str, is_futures: bool = False) -> float:
     service = BinanceService(api_key, api_secret)
     return await service.get_current_price(symbol, is_futures)
+
+async def close_position(api_key: str, api_secret: str, symbol: str, is_futures: bool = False) -> Dict:
+    service = BinanceService(api_key, api_secret)
+    return await service.close_position(symbol, is_futures)

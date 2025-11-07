@@ -1,90 +1,276 @@
+# backend/services/ema_monitor.py - FIXED & COMPLETE
+
 """
-EMA Signal Monitoring Service
-Monitors EMA crossovers and triggers automated trading
+EMA Signal Monitoring Service - Firebase Integrated
+✅ TÜM BORSALAR DESTEKLENİYOR: Binance, Bybit, OKX, KuCoin, MEXC
+✅ Otomatik Al-Sat
+✅ Özel Stratejiler (EMA 9/21 kesişimi)
+✅ Arbitraj için hazır (fiyat karşılaştırma)
 """
+
 import asyncio
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-import ccxt.async_support as ccxt
+import time
+
+from backend.firebase_admin import (
+    firebase_initialized,
+    get_user_api_keys,
+    save_ema_signal
+)
+from backend.services.trade_manager import trade_manager
 
 logger = logging.getLogger(__name__)
 
+
 class EMAMonitor:
-    """Monitors EMA signals for automated trading"""
-    
-    def __init__(self, db_connection):
-        self.db = db_connection
-        self.exchanges: Dict[str, ccxt.Exchange] = {}
+    """Monitors EMA signals for automated trading with Firebase integration"""
+
+    def __init__(self):
         self.monitoring_tasks: Dict[str, asyncio.Task] = {}
+
+    async def calculate_ema(
+        self,
+        exchange_name: str,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        interval: str,
+        period: int,
+        passphrase: str = ""
+    ) -> Optional[float]:
+        """
+        ✅ TÜM BORSALAR İÇİN EMA HESAPLAMA
+        Desteklenen: Binance, Bybit, OKX, KuCoin, MEXC
         
-    async def initialize_exchange(self, exchange_name: str, api_key: str, api_secret: str):
-        """Initialize exchange connection"""
+        Formula: EMA = (Close - EMA_prev) * multiplier + EMA_prev
+        Multiplier = 2 / (period + 1)
+        """
         try:
-            exchange_class = getattr(ccxt, exchange_name.lower())
-            exchange = exchange_class({
-                'apiKey': api_key,
-                'secret': api_secret,
-                'enableRateLimit': True,  # Critical for avoiding bans
-                'rateLimit': 1200,  # 50 requests per minute
-            })
+            import httpx
             
-            self.exchanges[exchange_name] = exchange
-            logger.info(f"Initialized {exchange_name} exchange")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to initialize {exchange_name}: {e}")
-            return False
-    
-    async def calculate_ema(self, exchange_name: str, symbol: str, interval: str, period: int) -> Optional[float]:
-        """Calculate EMA for given parameters"""
-        try:
-            exchange = self.exchanges.get(exchange_name)
-            if not exchange:
+            exchange_name = exchange_name.lower()
+            limit = period + 20  # Extra candles for accuracy
+            
+            # ============================================
+            # BINANCE
+            # ============================================
+            if exchange_name == "binance":
+                url = "https://fapi.binance.com/fapi/v1/klines"
+                params = {"symbol": symbol, "interval": interval, "limit": limit}
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    candles = response.json()
+                
+                closes = [float(candle[4]) for candle in candles]
+            
+            # ============================================
+            # BYBIT
+            # ============================================
+            elif exchange_name == "bybit":
+                url = "https://api.bybit.com/v5/market/kline"
+                params = {
+                    "category": "linear",
+                    "symbol": symbol,
+                    "interval": interval,
+                    "limit": limit
+                }
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                
+                candles = data.get("result", {}).get("list", [])
+                closes = [float(candle[4]) for candle in candles][::-1]  # Reverse!
+            
+            # ============================================
+            # OKX
+            # ============================================
+            elif exchange_name == "okx":
+                url = "https://www.okx.com/api/v5/market/candles"
+                interval_map = {
+                    "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
+                    "1h": "1H", "4h": "4H", "1d": "1D"
+                }
+                params = {
+                    "instId": symbol,
+                    "bar": interval_map.get(interval, interval),
+                    "limit": limit
+                }
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                
+                candles = data.get("data", [])
+                closes = [float(candle[4]) for candle in candles][::-1]  # Reverse!
+            
+            # ============================================
+            # KUCOIN (✅ YENİ!)
+            # ============================================
+            elif exchange_name == "kucoin":
+                url = "https://api-futures.kucoin.com/api/v1/kline/query"
+                # KuCoin interval: 1, 5, 15, 30, 60, 120, 240, 480, 720, 1440 (minutes)
+                interval_map = {
+                    "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+                    "1h": 60, "4h": 240, "1d": 1440
+                }
+                granularity = interval_map.get(interval, 15)
+                
+                # Time range
+                end_time = int(time.time())
+                start_time = end_time - (limit * 60 * granularity)
+                
+                params = {
+                    "symbol": symbol,
+                    "granularity": granularity,
+                    "from": start_time,
+                    "to": end_time
+                }
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                
+                if data.get("code") == "200000":
+                    candles = data.get("data", [])
+                    # KuCoin format: [time, open, high, low, close, volume]
+                    closes = [float(candle[2]) for candle in candles]  # Index 2 = close
+                else:
+                    logger.error(f"KuCoin API error: {data.get('msg')}")
+                    return None
+            
+            # ============================================
+            # MEXC (✅ YENİ!)
+            # ============================================
+            elif exchange_name == "mexc":
+                url = "https://contract.mexc.com/api/v1/contract/kline"
+                # MEXC interval: Min1, Min5, Min15, Min30, Min60, Hour4, Day1
+                interval_map = {
+                    "1m": "Min1", "5m": "Min5", "15m": "Min15", "30m": "Min30",
+                    "1h": "Min60", "4h": "Hour4", "1d": "Day1"
+                }
+                params = {
+                    "symbol": symbol,
+                    "interval": interval_map.get(interval, "Min15"),
+                    "limit": limit
+                }
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                
+                if data.get("success"):
+                    candles = data.get("data", {}).get("klines", [])
+                    # MEXC format: [timestamp, open, high, low, close, volume, ...]
+                    closes = [float(candle[2]) for candle in candles]  # Index 2 = close
+                else:
+                    logger.error(f"MEXC API error: {data.get('message')}")
+                    return None
+            
+            else:
+                logger.error(f"❌ Unsupported exchange: {exchange_name}")
                 return None
             
-            # Fetch OHLCV data
-            ohlcv = await exchange.fetch_ohlcv(symbol, interval, limit=period + 20)
-            
-            if len(ohlcv) < period:
+            # ============================================
+            # EMA CALCULATION (ALL EXCHANGES)
+            # ============================================
+            if len(closes) < period:
+                logger.warning(f"Not enough data for {exchange_name}: got {len(closes)}, need {period}")
                 return None
             
-            # Calculate EMA
-            closes = [candle[4] for candle in ohlcv]  # Close prices
-            
-            # Simple EMA calculation
             multiplier = 2 / (period + 1)
             ema = closes[0]
             
             for close in closes[1:]:
-                ema = (close * multiplier) + (ema * (1 - multiplier))
+                ema = (close - ema) * multiplier + ema
             
+            logger.debug(f"✅ {exchange_name.upper()} EMA{period} for {symbol}: {ema:.2f}")
             return ema
-            
+        
         except Exception as e:
-            logger.error(f"Error calculating EMA: {e}")
+            logger.error(f"❌ Error calculating EMA for {exchange_name}: {e}")
             return None
-    
-    async def check_ema_signal(self, user_id: str, exchange_name: str, symbol: str, interval: str) -> Optional[Dict]:
-        """Check for EMA crossover signals"""
+
+    async def get_previous_ema(self, user_id: str, symbol: str, interval: str, period: int) -> Optional[float]:
+        """Get previously stored EMA value from Firebase"""
+        try:
+            if not firebase_initialized:
+                return None
+
+            from firebase_admin import db
+
+            ref = db.reference(f'ema_cache/{user_id}/{symbol}/{interval}/ema{period}')
+            data = ref.get()
+
+            if data and isinstance(data, dict):
+                return float(data.get('value', 0))
+
+            return None
+        except Exception as e:
+            logger.error(f"Error getting previous EMA: {e}")
+            return None
+
+    async def store_ema(self, user_id: str, symbol: str, interval: str, period: int, value: float):
+        """Store EMA value in Firebase for future comparison"""
+        try:
+            if not firebase_initialized:
+                return
+
+            from firebase_admin import db
+
+            ref = db.reference(f'ema_cache/{user_id}/{symbol}/{interval}/ema{period}')
+            ref.set({
+                'value': value,
+                'timestamp': int(time.time())
+            })
+        except Exception as e:
+            logger.error(f"Error storing EMA: {e}")
+
+    async def check_ema_signal(
+        self,
+        user_id: str,
+        exchange_name: str,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        interval: str,
+        passphrase: str = ""
+    ) -> Optional[Dict]:
+        """
+        ✅ ÖZEL STRATEJİ: EMA 9/21 Kesişimi
+        - Bullish: EMA9 crosses above EMA21 → BUY
+        - Bearish: EMA9 crosses below EMA21 → SELL
+        """
         try:
             # Calculate EMA 9 and EMA 21
-            ema9 = await self.calculate_ema(exchange_name, symbol, interval, 9)
-            ema21 = await self.calculate_ema(exchange_name, symbol, interval, 21)
-            
+            ema9 = await self.calculate_ema(
+                exchange_name, api_key, api_secret, symbol, interval, 9, passphrase
+            )
+            ema21 = await self.calculate_ema(
+                exchange_name, api_key, api_secret, symbol, interval, 21, passphrase
+            )
+
             if ema9 is None or ema21 is None:
                 return None
-            
+
             # Get previous EMAs to detect crossover
             previous_ema9 = await self.get_previous_ema(user_id, symbol, interval, 9)
             previous_ema21 = await self.get_previous_ema(user_id, symbol, interval, 21)
-            
+
             # Store current EMAs
             await self.store_ema(user_id, symbol, interval, 9, ema9)
             await self.store_ema(user_id, symbol, interval, 21, ema21)
-            
+
             signal = None
-            
+
             # Bullish crossover: EMA9 crosses above EMA21
             if previous_ema9 and previous_ema21:
                 if previous_ema9 < previous_ema21 and ema9 > ema21:
@@ -92,278 +278,162 @@ class EMAMonitor:
                 # Bearish crossover: EMA9 crosses below EMA21
                 elif previous_ema9 > previous_ema21 and ema9 < ema21:
                     signal = 'SELL'
-            
-            return {
+
+            result = {
                 'symbol': symbol,
                 'interval': interval,
+                'exchange': exchange_name,
                 'ema9': round(ema9, 2),
                 'ema21': round(ema21, 2),
                 'signal': signal,
+                'price': ema9,
                 'timestamp': datetime.utcnow().isoformat()
             }
-            
+
+            # Save signal to Firebase if there's a crossover
+            if signal:
+                logger.info(f"🚨 EMA Signal: {exchange_name.upper()} {symbol} {signal} (EMA9: {ema9:.2f}, EMA21: {ema21:.2f})")
+                save_ema_signal(user_id, {
+                    'symbol': symbol,
+                    'signal_type': signal,
+                    'ema9': ema9,
+                    'ema21': ema21,
+                    'price': ema9,
+                    'exchange': exchange_name,
+                    'interval': interval
+                })
+
+                # Broadcast signal via WebSocket
+                try:
+                    from backend.websocket_manager import connection_manager
+                    await connection_manager.broadcast_signal({
+                        'signal': signal,
+                        'exchange': exchange_name,
+                        'symbol': symbol,
+                        'price': round(ema9, 2),
+                        'ema9': round(ema9, 2),
+                        'ema21': round(ema21, 2),
+                        'interval': interval,
+                        'user_id': user_id
+                    })
+                    logger.info(f"📡 Signal broadcasted to all clients")
+                except Exception as e:
+                    logger.error(f"Failed to broadcast signal: {e}")
+
+            return result
+
         except Exception as e:
             logger.error(f"Error checking EMA signal: {e}")
             return None
-    
-    async def get_previous_ema(self, user_id: str, symbol: str, interval: str, period: int) -> Optional[float]:
-        """Get previously stored EMA value"""
-        # Implementation depends on your database structure
-        # This is a placeholder
-        return None
-    
-    async def store_ema(self, user_id: str, symbol: str, interval: str, period: int, value: float):
-        """Store EMA value for future comparison"""
-        # Implementation depends on your database structure
-        # This is a placeholder
-        pass
-    
+
     async def auto_open_position(self, user_id: str, signal: Dict, user_settings: Dict):
-        """Automatically open position based on signal"""
+        """
+        ✅ OTOMATİK AL-SAT
+        Automatically open position based on signal using TradeManager
+        """
         try:
             symbol = signal['symbol']
-            side = 'LONG' if signal['signal'] == 'BUY' else 'SHORT'
-            
-            # Get user's trading settings
+            side = signal['signal']  # BUY or SELL
+            exchange_name = user_settings.get('exchange')
+
+            # Get user's API keys from Firebase
+            api_keys = get_user_api_keys(user_id, exchange_name)
+            if not api_keys:
+                logger.error(f"No API keys found for {exchange_name}")
+                return None
+
+            # Get trading settings
             amount = user_settings.get('default_amount', 10)
             leverage = user_settings.get('default_leverage', 10)
             tp_percent = user_settings.get('default_tp', 5)
             sl_percent = user_settings.get('default_sl', 2)
-            
-            # Calculate position size
-            position_size = amount * leverage
-            
-            # Get current price
-            exchange_name = user_settings.get('exchange')
-            exchange = self.exchanges.get(exchange_name)
-            
-            if not exchange:
-                logger.error(f"Exchange {exchange_name} not initialized")
-                return None
-            
-            ticker = await exchange.fetch_ticker(symbol)
-            entry_price = ticker['last']
-            
-            # Calculate TP/SL prices
-            if side == 'LONG':
-                tp_price = entry_price * (1 + tp_percent / 100)
-                sl_price = entry_price * (1 - sl_percent / 100)
-            else:
-                tp_price = entry_price * (1 - tp_percent / 100)
-                sl_price = entry_price * (1 + sl_percent / 100)
-            
-            # Open position on exchange
-            order_params = {
-                'symbol': symbol,
-                'type': 'market',
-                'side': 'buy' if side == 'LONG' else 'sell',
-                'amount': position_size / entry_price,
-                'params': {
-                    'leverage': leverage,
-                }
-            }
-            
-            order = await exchange.create_order(**order_params)
-            
-            # Store position in database
-            position_data = {
-                'user_id': user_id,
-                'symbol': symbol,
-                'side': side,
-                'entry_price': entry_price,
-                'amount': amount,
-                'leverage': leverage,
-                'tp_price': tp_price,
-                'sl_price': sl_price,
-                'exchange': exchange_name,
-                'order_id': order['id'],
-                'status': 'open',
-                'opened_at': datetime.utcnow().isoformat()
-            }
-            
-            # Save to database (implementation needed)
-            await self.save_position(position_data)
-            
-            logger.info(f"Auto-opened {side} position for {symbol} at {entry_price}")
-            
-            # Start monitoring this position for TP/SL
-            await self.monitor_position(position_data)
-            
-            return position_data
-            
-        except Exception as e:
-            logger.error(f"Error auto-opening position: {e}")
-            return None
-    
-    async def monitor_position(self, position: Dict):
-        """Monitor position for TP/SL triggers"""
-        try:
-            symbol = position['symbol']
-            exchange_name = position['exchange']
-            exchange = self.exchanges.get(exchange_name)
-            
-            if not exchange:
-                return
-            
-            while True:
-                # Get current price
-                ticker = await exchange.fetch_ticker(symbol)
-                current_price = ticker['last']
-                
-                # Check TP/SL
-                side = position['side']
-                tp_price = position['tp_price']
-                sl_price = position['sl_price']
-                
-                should_close = False
-                reason = None
-                
-                if side == 'LONG':
-                    if current_price >= tp_price:
-                        should_close = True
-                        reason = 'TP'
-                    elif current_price <= sl_price:
-                        should_close = True
-                        reason = 'SL'
-                else:  # SHORT
-                    if current_price <= tp_price:
-                        should_close = True
-                        reason = 'TP'
-                    elif current_price >= sl_price:
-                        should_close = True
-                        reason = 'SL'
-                
-                if should_close:
-                    await self.close_position(position, current_price, reason)
-                    break
-                
-                # Check every 5 seconds (adjust based on needs)
-                await asyncio.sleep(5)
-                
-        except Exception as e:
-            logger.error(f"Error monitoring position: {e}")
-    
-    async def close_position(self, position: Dict, close_price: float, reason: str):
-        """Close position and calculate P&L"""
-        try:
-            exchange_name = position['exchange']
-            exchange = self.exchanges.get(exchange_name)
-            
-            if not exchange:
-                return
-            
-            # Close order
-            symbol = position['symbol']
-            side = 'sell' if position['side'] == 'LONG' else 'buy'
-            amount = position['amount'] * position['leverage'] / close_price
-            
-            order = await exchange.create_order(
+
+            logger.info(
+                f"🤖 Auto-opening {side} position: {symbol} "
+                f"(amount: ${amount}, leverage: {leverage}x, TP: {tp_percent}%, SL: {sl_percent}%)"
+            )
+
+            # Use TradeManager to place order with idempotency
+            order_result = await trade_manager.create_order(
+                user_id=user_id,
+                exchange=exchange_name,
+                api_key=api_keys.get('api_key'),
+                api_secret=api_keys.get('api_secret'),
                 symbol=symbol,
-                type='market',
                 side=side,
-                amount=amount
+                amount=amount,
+                leverage=leverage,
+                is_futures=True,
+                tp_percentage=tp_percent,
+                sl_percentage=sl_percent,
+                passphrase=api_keys.get('passphrase', '')
             )
-            
-            # Calculate P&L
-            entry_price = position['entry_price']
-            position_size = position['amount'] * position['leverage']
-            
-            if position['side'] == 'LONG':
-                pnl = (close_price - entry_price) / entry_price * position_size
-            else:
-                pnl = (entry_price - close_price) / entry_price * position_size
-            
-            pnl_percent = (pnl / position['amount']) * 100
-            
-            # Update position in database
-            await self.update_position_closed(
-                position['id'],
-                close_price,
-                pnl,
-                pnl_percent,
-                reason
-            )
-            
-            logger.info(f"Closed position {position['id']} at {close_price}, P&L: ${pnl:.2f} ({reason})")
-            
+
+            logger.info(f"✅ Position opened: {order_result.get('trade_id')}")
+            return order_result
+
         except Exception as e:
-            logger.error(f"Error closing position: {e}")
-    
-    async def save_position(self, position_data: Dict):
-        """Save position to database"""
-        # Implementation needed based on your database
-        pass
-    
-    async def update_position_closed(self, position_id: str, close_price: float, pnl: float, pnl_percent: float, reason: str):
-        """Update closed position in database"""
-        # Implementation needed based on your database
-        pass
-    
-    async def start_monitoring_user(self, user_id: str, user_settings: Dict):
-        """Start monitoring signals for a user"""
-        if user_id in self.monitoring_tasks:
-            logger.warning(f"Already monitoring user {user_id}")
+            logger.error(f"❌ Error auto-opening position: {e}")
+            return None
+
+    async def start_monitoring(self, user_id: str, config: Dict):
+        """Start monitoring EMA signals for a user"""
+        task_key = f"{user_id}_{config['symbol']}_{config['interval']}"
+        
+        if task_key in self.monitoring_tasks:
+            logger.warning(f"Monitoring already active for {task_key}")
             return
-        
-        task = asyncio.create_task(self._monitor_loop(user_id, user_settings))
-        self.monitoring_tasks[user_id] = task
-        logger.info(f"Started monitoring for user {user_id}")
-    
-    async def stop_monitoring_user(self, user_id: str):
-        """Stop monitoring signals for a user"""
-        if user_id in self.monitoring_tasks:
-            task = self.monitoring_tasks[user_id]
-            task.cancel()
-            del self.monitoring_tasks[user_id]
-            logger.info(f"Stopped monitoring for user {user_id}")
-    
-    async def _monitor_loop(self, user_id: str, user_settings: Dict):
-        """Main monitoring loop for a user"""
-        try:
+
+        async def monitor_loop():
             while True:
-                # Get user's watchlist
-                watchlist = user_settings.get('watchlist', [])
-                interval = user_settings.get('interval', '15m')
-                exchange_name = user_settings.get('exchange')
-                
-                for symbol in watchlist:
-                    # Check signal
-                    signal = await self.check_ema_signal(user_id, exchange_name, symbol, interval)
-                    
-                    if signal and signal['signal'] in ['BUY', 'SELL']:
-                        # Check if auto-trading is enabled
-                        if user_settings.get('auto_trading', False):
-                            await self.auto_open_position(user_id, signal, user_settings)
-                    
-                    # Rate limiting - wait between checks
-                    await asyncio.sleep(2)
-                
-                # Wait for next interval check
-                # For 15m interval, check every 5 minutes
-                interval_map = {
-                    '15m': 300,  # 5 minutes
-                    '30m': 600,  # 10 minutes
-                    '1h': 1200,  # 20 minutes
-                    '4h': 3600,  # 1 hour
-                    '1d': 7200,  # 2 hours
-                }
-                
-                wait_time = interval_map.get(interval, 300)
-                await asyncio.sleep(wait_time)
-                
-        except asyncio.CancelledError:
-            logger.info(f"Monitoring cancelled for user {user_id}")
-        except Exception as e:
-            logger.error(f"Error in monitoring loop: {e}")
-    
-    async def cleanup(self):
-        """Cleanup all resources"""
-        # Cancel all monitoring tasks
-        for task in self.monitoring_tasks.values():
-            task.cancel()
+                try:
+                    signal = await self.check_ema_signal(
+                        user_id=user_id,
+                        exchange_name=config['exchange'],
+                        api_key=config['api_key'],
+                        api_secret=config['api_secret'],
+                        symbol=config['symbol'],
+                        interval=config['interval'],
+                        passphrase=config.get('passphrase', '')
+                    )
+
+                    if signal and signal['signal'] and config.get('auto_trade', False):
+                        await self.auto_open_position(user_id, signal, config)
+
+                    await asyncio.sleep(60)  # Check every minute
+                except asyncio.CancelledError:
+                    logger.info(f"Monitoring cancelled for {task_key}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in monitoring loop: {e}")
+                    await asyncio.sleep(60)
+
+        task = asyncio.create_task(monitor_loop())
+        self.monitoring_tasks[task_key] = task
+        logger.info(f"✅ Started monitoring {task_key}")
+
+    async def stop_monitoring(self, user_id: str, symbol: str, interval: str):
+        """Stop monitoring for a specific configuration"""
+        task_key = f"{user_id}_{symbol}_{interval}"
         
-        # Close all exchange connections
-        for exchange in self.exchanges.values():
-            await exchange.close()
+        if task_key in self.monitoring_tasks:
+            self.monitoring_tasks[task_key].cancel()
+            del self.monitoring_tasks[task_key]
+            logger.info(f"🛑 Stopped monitoring {task_key}")
+
+    async def stop_all_monitoring(self, user_id: str):
+        """Stop all monitoring tasks for a user"""
+        tasks_to_cancel = [
+            key for key in self.monitoring_tasks.keys() 
+            if key.startswith(user_id)
+        ]
         
-        logger.info("EMA Monitor cleaned up")
+        for task_key in tasks_to_cancel:
+            self.monitoring_tasks[task_key].cancel()
+            del self.monitoring_tasks[task_key]
+        
+        logger.info(f"🛑 Stopped all monitoring for user {user_id}")
+
+
+# Global instance
+ema_monitor = EMAMonitor()

@@ -1,4 +1,4 @@
-# Last updated: 2025-11-06 20:30 - Fixed integrations routing
+# Last updated: 2025-11-07 - Added proper logging configuration
 from fastapi import FastAPI, HTTPException, Depends, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,6 +11,20 @@ from datetime import datetime, timedelta
 import hashlib
 import hmac
 import time
+import logging
+import sys
+
+# ✅ LOGGING CONFIGURATION - MUST BE AT THE TOP
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("🚀 Starting EMA Navigator AI Trading API...")
 
 # Import database module
 try:
@@ -18,44 +32,44 @@ try:
     DATABASE_AVAILABLE = True
 except ImportError:
     DATABASE_AVAILABLE = False
-    print("⚠️ Warning: Database module not available")
+    logger.warning("⚠️ Warning: Database module not available")
 
 # Import authentication with fallback
 try:
     from backend.auth import get_current_user as auth_get_current_user
     from backend.auth import get_user_plan, check_plan_limits
     AUTH_MODULE_AVAILABLE = True
-    print("✅ Auth module loaded")
+    logger.info("✅ Auth module loaded")
 except ImportError:
     AUTH_MODULE_AVAILABLE = False
-    print("⚠️ Warning: Auth module not available, using fallback")
+    logger.warning("⚠️ Warning: Auth module not available, using fallback")
 
 # Import auto-trading router
 try:
     from backend.api.auto_trading import router as auto_trading_router
     AUTO_TRADING_AVAILABLE = True
-    print("✅ Auto-trading module loaded successfully")
+    logger.info("✅ Auto-trading module loaded successfully")
 except ImportError as e:
     AUTO_TRADING_AVAILABLE = False
-    print(f"⚠️ Warning: Auto-trading module not available - {str(e)}")
+    logger.warning(f"⚠️ Warning: Auto-trading module not available - {str(e)}")
 
 # Import exchange services
 try:
     from backend.services import binance_service, bybit_service, okx_service, kucoin_service, mexc_service
     EXCHANGE_SERVICES_AVAILABLE = True
-    print("✅ Exchange services loaded")
+    logger.info("✅ Exchange services loaded")
 except ImportError:
     EXCHANGE_SERVICES_AVAILABLE = False
-    print("⚠️ Warning: Exchange services not available")
+    logger.warning("⚠️ Warning: Exchange services not available")
 
 # Import WebSocket manager
 try:
     from backend.websocket_manager import connection_manager
     WEBSOCKET_AVAILABLE = True
-    print("✅ WebSocket manager loaded")
+    logger.info("✅ WebSocket manager loaded")
 except ImportError:
     WEBSOCKET_AVAILABLE = False
-    print("⚠️ Warning: WebSocket manager not available")
+    logger.warning("⚠️ Warning: WebSocket manager not available")
 
 app = FastAPI(title="EMA Navigator AI Trading API")
 
@@ -184,37 +198,37 @@ if AUTO_TRADING_AVAILABLE:
 try:
     from backend.api.balance import router as balance_router
     app.include_router(balance_router)
-    print("✅ Balance module loaded")
+    logger.info("✅ Balance module loaded")
 except ImportError as e:
-    print(f"⚠️ Warning: Balance module not available - {e}")
+    logger.warning(f"⚠️ Warning: Balance module not available - {e}")
 
 try:
     from backend.api.payments import router as payments_router
     app.include_router(payments_router)
-    print("✅ Payments module loaded")
+    logger.info("✅ Payments module loaded")
 except ImportError:
-    print("⚠️ Warning: Payments module not available")
+    logger.warning("⚠️ Warning: Payments module not available")
 
 try:
     from backend.api.admin import router as admin_router
     app.include_router(admin_router)
-    print("✅ Admin module loaded")
+    logger.info("✅ Admin module loaded")
 except ImportError:
-    print("⚠️ Warning: Admin module not available")
+    logger.warning("⚠️ Warning: Admin module not available")
 
 try:
     from backend.api.integrations import router as integrations_router
     app.include_router(integrations_router)
-    print("✅ Integrations module loaded (includes API key management)")
+    logger.info("✅ Integrations module loaded (includes API key management)")
 except ImportError:
-    print("⚠️ Warning: Integrations module not available")
+    logger.warning("⚠️ Warning: Integrations module not available")
 
 try:
     from backend.api.transactions import router as transactions_router
     app.include_router(transactions_router, prefix="/api")
-    print("✅ Transactions module loaded")
+    logger.info("✅ Transactions module loaded")
 except ImportError as e:
-    print(f"⚠️ Warning: Transactions module not available - {e}")
+    logger.warning(f"⚠️ Warning: Transactions module not available - {e}")
 
 # Exchange API Helpers
 async def validate_binance_api(api_key: str, api_secret: str) -> bool:
@@ -236,7 +250,7 @@ async def validate_binance_api(api_key: str, api_secret: str) -> bool:
             )
             return response.status_code == 200
     except Exception as e:
-        print(f"Binance validation error: {e}")
+        logger.error(f"Binance validation error: {e}")
         return False
 
 async def validate_bybit_api(api_key: str, api_secret: str) -> bool:
@@ -258,7 +272,7 @@ async def validate_bybit_api(api_key: str, api_secret: str) -> bool:
             )
             return response.status_code == 200
     except Exception as e:
-        print(f"Bybit validation error: {e}")
+        logger.error(f"Bybit validation error: {e}")
         return False
 
 async def validate_okx_api(api_key: str, api_secret: str) -> bool:
@@ -285,7 +299,7 @@ async def validate_okx_api(api_key: str, api_secret: str) -> bool:
             )
             return response.status_code == 200
     except Exception as e:
-        print(f"OKX validation error: {e}")
+        logger.error(f"OKX validation error: {e}")
         return False
 
 async def calculate_ema(exchange: str, symbol: str, interval: str = "15m"):
@@ -497,8 +511,8 @@ async def payment_webhook(payload: dict):
     """Handle LemonSqueezy webhooks"""
     try:
         # Log webhook data
-        print("📦 Webhook received:")
-        print(json.dumps(payload, indent=2))
+        logger.info("📦 Webhook received:")
+        logger.info(json.dumps(payload, indent=2))
         
         # LemonSqueezy webhook events
         event_name = payload.get('meta', {}).get('event_name')
@@ -522,7 +536,7 @@ async def payment_webhook(payload: dict):
             elif variant_id == '1075030':
                 plan = 'enterprise'
             
-            print(f"📦 New order: {order_id} | Email: {user_email} | Plan: {plan}")
+            logger.info(f"📦 New order: {order_id} | Email: {user_email} | Plan: {plan}")
             
             # Save to Firebase
             try:
@@ -538,24 +552,24 @@ async def payment_webhook(payload: dict):
                         'created_at': int(time.time()),
                         'updated_at': int(time.time())
                     })
-                    print(f"✅ Subscription saved for {user_email}")
+                    logger.info(f"✅ Subscription saved for {user_email}")
                 else:
-                    print(f"⚠️ Firebase not initialized, subscription not saved")
+                    logger.warning(f"⚠️ Firebase not initialized, subscription not saved")
             except Exception as e:
-                print(f"❌ Error saving subscription: {e}")
+                logger.error(f"❌ Error saving subscription: {e}")
             
         elif event_name == 'subscription_created':
             subscription_id = payload.get('data', {}).get('id')
             customer_email = payload.get('data', {}).get('attributes', {}).get('user_email')
             status = payload.get('data', {}).get('attributes', {}).get('status')
             
-            print(f"🔄 Subscription created: {subscription_id} | Email: {customer_email} | Status: {status}")
+            logger.info(f"🔄 Subscription created: {subscription_id} | Email: {customer_email} | Status: {status}")
             
         elif event_name == 'subscription_cancelled':
             subscription_id = payload.get('data', {}).get('id')
             customer_email = payload.get('data', {}).get('attributes', {}).get('user_email')
             
-            print(f"❌ Subscription cancelled: {subscription_id} | Email: {customer_email}")
+            logger.info(f"❌ Subscription cancelled: {subscription_id} | Email: {customer_email}")
             
             # Update to free plan
             try:
@@ -568,14 +582,14 @@ async def payment_webhook(payload: dict):
                         'status': 'cancelled',
                         'cancelled_at': int(time.time())
                     })
-                    print(f"✅ User downgraded to free: {customer_email}")
+                    logger.info(f"✅ User downgraded to free: {customer_email}")
             except Exception as e:
-                print(f"❌ Error updating subscription: {e}")
+                logger.error(f"❌ Error updating subscription: {e}")
             
         return {"message": "Webhook processed successfully"}
         
     except Exception as e:
-        print(f"❌ Webhook processing error: {str(e)}")
+        logger.error(f"❌ Webhook processing error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
@@ -594,7 +608,7 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
             if subscription:
                 return subscription
     except Exception as e:
-        print(f"Error fetching subscription: {e}")
+        logger.error(f"Error fetching subscription: {e}")
     
     # Default response
     return {
@@ -632,7 +646,7 @@ async def websocket_signals(websocket: WebSocket):
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                print(f"WebSocket error: {e}")
+                logger.error(f"WebSocket error: {e}")
                 break
 
     finally:
@@ -661,7 +675,7 @@ async def get_transactions(hours: int = 24, current_user: dict = Depends(get_cur
             "count": len(trades)
         }
     except Exception as e:
-        print(f"Error fetching transactions: {e}")
+        logger.error(f"Error fetching transactions: {e}")
         # Return empty list if error
         return {
             "transactions": [],
