@@ -22,12 +22,10 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { botAPI } from "@/lib/api";
 
 /**
- * Settings page
- * - Controlled tabs driven by ?tab= query param
- * - TabsList does NOT show the user-facing triggers that were moved to Dashboard.
- * - TabsContent kept intact so direct links /settings?tab=... still work.
- * - Saves basic trading defaults to Firebase under users/{uid}/settings
- * - Fetches optional feature flags from backend (if botAPI.getUserFeatures exists)
+ * Settings page (final)
+ * - Controlled by ?tab= query param
+ * - Dashboard moved tabs are not shown as triggers here (keeps content accessible by direct link)
+ * - Fetches optional feature flags via botAPI.getUserFeatures if available
  */
 
 const allowedTabs = [
@@ -110,12 +108,10 @@ const Settings = () => {
     }
   };
 
-  // Friendly fallback if selectedTab is wrong
   const invalidTab = !allowedTabs.includes(selectedTab);
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -136,13 +132,10 @@ const Settings = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v)} className="w-full">
-          {/* We intentionally do not present the moved user-facing tab triggers here.
-              This area can hold admin/advanced triggers if needed. */}
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 mb-8 h-auto">
-            {/* (Optional admin triggers can be added here) */}
+            {/* Intentionally empty for user-facing tabs moved to Dashboard */}
           </TabsList>
 
           {invalidTab && (
@@ -151,11 +144,10 @@ const Settings = () => {
                 <p className="font-semibold">Geçersiz sekme</p>
                 <p className="text-sm text-muted-foreground">
                   Seçilen sekme bulunamadı. Lütfen Dashboard üzerinden ilgili bölümü açın veya
-                  <Button variant="link" className="ml-1" onClick={() => navigate("/dashboard")}>
-                    Dashboard'a dönün
-                  </Button>
-                  .
                 </p>
+                <div className="mt-4">
+                  <Button onClick={() => navigate("/dashboard")}>Dashboard'a Dön</Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -282,8 +274,7 @@ const Settings = () => {
                 <div className="space-y-2">
                   <h3 className="font-semibold text-lg">🤖 Otomatik Al-Sat Sistemi</h3>
                   <p className="text-sm text-muted-foreground">
-                    Bot'u aktif ederek EMA (9/21) gibi stratejilere göre otomatik işlem açabilirsiniz.
-                    Bu bölüm paket ve yetkiler doğrultusunda aktif/pasif olacaktır.
+                    Bot'u aktif ederek EMA tabanlı stratejilerle otomatik işlem açabilirsiniz.
                   </p>
                 </div>
               </CardContent>
