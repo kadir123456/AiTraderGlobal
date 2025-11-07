@@ -1,123 +1,68 @@
-import { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useSubscription } from '@/hooks/useSubscription';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Lock, Zap, Crown } from 'lucide-react';
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { useSubscription } from "@/hooks/useSubscription";
 
-interface FeatureGuardProps {
-  requiredPlan: 'pro' | 'enterprise';
-  feature: string;
-  children: ReactNode;
-  showUpgrade?: boolean;
-}
+/**
+ * Feature guard components:
+ * - ProFeature: checks autoTrading access (Pro/Enterprise)
+ * - PremiumFeature: checks customStrategies access (Enterprise)
+ *
+ * These wrappers render children when the user's plan allows the feature.
+ * Otherwise they show a friendly CTA to upgrade.
+ */
 
-export const FeatureGuard = ({
-  requiredPlan,
-  feature,
-  children,
-  showUpgrade = true
-}: FeatureGuardProps) => {
-  const { tier } = useSubscription();
-  const navigate = useNavigate();
-
-  // Plan hierarchy
-  const planOrder: Record<string, number> = {
-    free: 0,
-    pro: 1,
-    enterprise: 2
-  };
-
-  const hasAccess = planOrder[tier] >= planOrder[requiredPlan];
-
-  if (!hasAccess) {
-    const Icon = requiredPlan === 'enterprise' ? Crown : Zap;
-    
-    return (
-      <Alert className="border-primary/50">
-        <Icon className="h-4 w-4 text-primary" />
-        <AlertTitle className="flex items-center gap-2">
-          <Lock className="h-4 w-4" />
-          {requiredPlan === 'enterprise' ? 'Enterprise' : 'Pro'} Özellik
-        </AlertTitle>
-        <AlertDescription className="mt-2 space-y-3">
-          <p>
-            <strong>{feature}</strong> özelliği{' '}
-            <span className="text-primary font-bold">
-              {requiredPlan.toUpperCase()}
-            </span>{' '}
-            planında mevcut.
-          </p>
-
-          {tier === 'free' && requiredPlan === 'pro' && (
-            <div className="text-sm text-muted-foreground">
-              <p>Pro plan ile:</p>
-              <ul className="list-disc list-inside ml-2 space-y-1">
-                <li>Sınırsız borsa bağlantısı</li>
-                <li>Otomatik trading bot</li>
-                <li>EMA 9/21 stratejileri</li>
-                <li>TP/SL yönetimi</li>
-                <li>Gelişmiş analitik</li>
-              </ul>
-            </div>
-          )}
-
-          {tier === 'free' && requiredPlan === 'enterprise' && (
-            <div className="text-sm text-muted-foreground">
-              <p>Enterprise plan ile:</p>
-              <ul className="list-disc list-inside ml-2 space-y-1">
-                <li>Tüm Pro özellikleri</li>
-                <li>Özel strateji oluşturucu</li>
-                <li>Arbitraj modülü</li>
-                <li>API erişimi</li>
-                <li>Özel destek</li>
-              </ul>
-            </div>
-          )}
-
-          {tier === 'pro' && requiredPlan === 'enterprise' && (
-            <div className="text-sm text-muted-foreground">
-              <p>Enterprise plan ile:</p>
-              <ul className="list-disc list-inside ml-2 space-y-1">
-                <li>Özel strateji oluşturucu</li>
-                <li>Arbitraj tarayıcı</li>
-                <li>API erişimi</li>
-                <li>Özel danışmanlık</li>
-                <li>SLA garantisi</li>
-              </ul>
-            </div>
-          )}
-
-          {showUpgrade && (
-            <Button
-              onClick={() => navigate('/pricing')}
-              className="w-full mt-2"
-              variant="default"
-            >
-              <Icon className="h-4 w-4 mr-2" />
-              {requiredPlan === 'enterprise' ? 'Enterprise\'a' : 'Pro\'ya'} Yükselt
-            </Button>
-          )}
-        </AlertDescription>
-      </Alert>
-    );
-  }
-  
-  return <>{children}</>;
+type FeatureGuardProps = {
+  feature: string; // human readable feature name for messaging
+  children: React.ReactNode;
 };
 
-// Quick access guards
-export const ProFeature = ({ children, feature }: { children: ReactNode; feature: string }) => (
-  <FeatureGuard requiredPlan="pro" feature={feature}>
-    {children}
-  </FeatureGuard>
-);
+export const ProFeature: React.FC<FeatureGuardProps> = ({ feature, children }) => {
+  const { tier, loading, canAccessFeature } = useSubscription();
 
-export const EnterpriseFeature = ({ children, feature }: { children: ReactNode; feature: string }) => (
-  <FeatureGuard requiredPlan="enterprise" feature={feature}>
-    {children}
-  </FeatureGuard>
-);
+  // canAccessFeature uses plan keys (e.g. "autoTrading", "customStrategies")
+  // TS helper: cast to any because hook typing is generic
+  const allowed = !loading && !!canAccessFeature && (canAccessFeature as any)("autoTrading");
 
-// Alias for backwards compatibility
-export const PremiumFeature = EnterpriseFeature;
+  if (allowed) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="p-4 border border-border rounded-md bg-muted/10">
+      <div className="flex flex-col gap-2">
+        <p className="font-semibold">Bu özellik paketiniz tarafından kapatılmış</p>
+        <p className="text-sm text-muted-foreground">
+          {feature} özelliğine erişmek için Pro veya Enterprise pakete yükseltmeniz gerekir.
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <Button onClick={() => (window.location.href = "/#pricing")}>Paketi Yükselt</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const PremiumFeature: React.FC<FeatureGuardProps> = ({ feature, children }) => {
+  const { tier, loading, canAccessFeature } = useSubscription();
+  const allowed = !loading && !!canAccessFeature && (canAccessFeature as any)("customStrategies");
+
+  if (allowed) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="p-4 border border-border rounded-md bg-muted/10">
+      <div className="flex flex-col gap-2">
+        <p className="font-semibold">Bu özellik paketiniz tarafından kapatılmış</p>
+        <p className="text-sm text-muted-foreground">
+          {feature} için Enterprise pakete yükseltmeniz gerekmektedir.
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <Button onClick={() => (window.location.href = "/#pricing")}>Paket Yükselt</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProFeature;
