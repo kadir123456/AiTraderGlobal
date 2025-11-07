@@ -52,12 +52,27 @@ async def update_auto_trading_settings(
         # ✅ Check subscription plan - Auto-trading requires Pro or Enterprise
         if settings.enabled:
             subscription = get_user_subscription(user_id)
-            user_tier = subscription.get('tier', 'free') if subscription else 'free'
+            
+            # ✅ FIXED: Use 'plan' instead of 'tier' (matches Firebase structure)
+            user_plan = subscription.get('plan', 'free') if subscription else 'free'
+            subscription_status = subscription.get('status', 'inactive') if subscription else 'inactive'
+            
+            # 🔧 DEBUG: Log subscription info
+            logger.info(f"🔍 User {user_id} subscription: {subscription}")
+            logger.info(f"🔍 Plan: {user_plan}, Status: {subscription_status}")
 
-            if user_tier == 'free':
+            # ✅ Check if user has an active paid plan
+            is_paid_plan = user_plan.lower() in ['pro', 'enterprise', 'premium', 'business']
+            is_active = subscription_status == 'active'
+            
+            if not (is_paid_plan and is_active):
                 raise HTTPException(
                     status_code=403,
-                    detail="Auto-trading is a PRO feature. Please upgrade your plan to use this feature."
+                    detail=(
+                        f"Auto-trading requires an active PRO or ENTERPRISE plan. "
+                        f"Your current plan: {user_plan} ({subscription_status}). "
+                        f"Please upgrade to access this feature."
+                    )
                 )
 
         # ✅ Validate exchange API keys exist
