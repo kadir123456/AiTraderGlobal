@@ -24,7 +24,7 @@ export interface OpenPositionParams {
   exchange: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
-  amount: number;
+  amount: number; // quantity (base amount)
   leverage: number;
   tpPercentage: number;
   slPercentage: number;
@@ -69,6 +69,7 @@ export const useTrading = () => {
     }
 
     try {
+      // params.amount is expected to be the base quantity (e.g., BTC amount for BTCUSDT)
       await botAPI.createPosition(
         params.exchange,
         params.symbol,

@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, DollarSign, TrendingUp, BarChart3, RefreshCw, Menu, Shield, Wallet } from "lucide-react";
@@ -36,15 +36,15 @@ const Dashboard = () => {
       navigate('/auth', { replace: true });
     }
   }, [user, authLoading, navigate]);
+
   const { positions, loading: positionsLoading, refreshPositions } = useTrading();
   const { plan, loading: planLoading } = useSubscription();
   const { exchanges, loading: exchangesLoading } = useExchanges();
   const [accountType, setAccountType] = useState<'spot' | 'futures'>('futures');
   
-  const exchangeNames = exchanges.map(ex => ex.name);
+  const exchangeNames = useMemo(() => exchanges.map(ex => ex.name), [exchanges]);
   const { balances, loading: balancesLoading, refreshBalances } = useBalance(exchangeNames, accountType === 'futures');
 
-  // Auto-refresh positions every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       refreshPositions();
@@ -52,15 +52,12 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [refreshPositions]);
 
-  // Calculate real stats from positions
   const stats = useMemo(() => {
     const totalPnL = positions.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
     const totalPnLPercent = positions.length > 0 
       ? positions.reduce((sum, pos) => sum + (pos.pnlPercent || 0), 0) / positions.length 
       : 0;
 
-    // TODO: Get real balance from exchange API
-    // For now showing PnL only (balance would come from /api/bot/balance endpoint)
     const displayBalance = totalPnL;
 
     return [
@@ -99,6 +96,25 @@ const Dashboard = () => {
     await logout();
     navigate('/');
   };
+
+  const handleRefreshBalances = useCallback(async () => {
+    try {
+      await refreshBalances();
+      toast.success('Bakiyeler güncellendi');
+    } catch (error) {
+      toast.error('Bakiyeler güncellenirken hata oluştu');
+    }
+  }, [refreshBalances]);
+
+  const quickLinks = [
+    { key: 'exchanges', label: '🏦 Borsalar', icon: <Wallet className="h-5 w-5 text-primary" />, to: '/settings?tab=exchanges' },
+    { key: 'trading', label: '📊 Manuel İşlem', icon: <TrendingUp className="h-5 w-5 text-primary" />, to: '/trading?mode=manual' },
+    { key: 'auto-trading', label: '🤖 Otomatik Al-Sat', icon: <RefreshCw className="h-5 w-5 text-primary" />, to: '/settings?tab=auto-trading' },
+    { key: 'custom-strategies', label: '⚡ Özel Stratejiler', icon: <BarChart3 className="h-5 w-5 text-primary" />, to: '/settings?tab=custom-strategies' },
+    { key: 'arbitrage', label: '📈 Arbitraj', icon: <Activity className="h-5 w-5 text-primary" />, to: '/settings?tab=arbitrage' },
+    { key: 'subscription', label: '💎 Paketim', icon: <DollarSign className="h-5 w-5 text-primary" />, to: '/settings?tab=subscription' },
+    { key: 'profile', label: '👤 Profil', icon: <Menu className="h-5 w-5 text-primary" />, to: '/settings?tab=profile' },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,57 +213,37 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* User Info - For Admin Setup */}
-        {user && (
-          <Card className="border-border bg-card/50 backdrop-blur-sm mb-4">
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">User ID:</span>
-                  <code className="bg-muted px-2 py-1 rounded font-mono">{user.uid}</code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(user.uid);
-                      toast.success('User ID copied!');
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="font-medium">{user.email}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* How to Use */}
-        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
-          <CardHeader>
-            <CardTitle className="text-lg sm:text-xl">{t('dashboard.how_to_use')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-              <li>{t('dashboard.how_to_step1')}</li>
-              <li>{t('dashboard.how_to_step2')}</li>
-              <li>{t('dashboard.how_to_step3')}</li>
-              <li>{t('dashboard.how_to_step4')}</li>
-            </ol>
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <Button size="sm" onClick={() => navigate('/settings')}>
-                {t('dashboard.go_to_settings')}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>
-                {t('dashboard.go_to_trading')}
-              </Button>
+        {/* Quick Access Grid */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Hızlı Erişim</h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => navigate('/settings')}>Ayarlar</Button>
+              <Button size="sm" onClick={() => navigate('/trading')}>Trading’e Git</Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {quickLinks.map(link => (
+              <div
+                key={link.key}
+                role="button"
+                onClick={() => navigate(link.to)}
+                className="cursor-pointer rounded-lg border border-border bg-card/60 p-4 flex flex-col items-start gap-3 hover:shadow-lg transition-shadow"
+              >
+                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-primary/10 text-primary">
+                  {link.icon}
+                </div>
+                <div className="text-sm font-medium">{link.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Live signals panel */}
+        <div className="mb-8">
+          <LiveSignalIndicator />
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -284,7 +280,7 @@ const Dashboard = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => refreshBalances()}
+                  onClick={handleRefreshBalances}
                   disabled={balancesLoading}
                 >
                   <RefreshCw className={`h-4 w-4 ${balancesLoading ? 'animate-spin' : ''}`} />
@@ -319,11 +315,6 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Live Trading Signals */}
-        <div className="mb-8">
-          <LiveSignalIndicator />
-        </div>
 
         {/* Open Positions */}
         <Card className="border-border bg-card/50 backdrop-blur-sm">

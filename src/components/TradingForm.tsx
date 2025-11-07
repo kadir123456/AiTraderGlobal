@@ -30,6 +30,7 @@ export const TradingForm = () => {
   const [selectedCoin, setSelectedCoin] = useState<string>('');
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState<string>('');
+  const [amountType, setAmountType] = useState<'quote' | 'base'>('quote');
   const [leverage, setLeverage] = useState<string>(settings.defaultLeverage.toString());
   const [tpPercent, setTpPercent] = useState<string>(settings.defaultTP.toString());
   const [slPercent, setSlPercent] = useState<string>(settings.defaultSL.toString());
@@ -40,7 +41,6 @@ export const TradingForm = () => {
   const [emaSignal, setEmaSignal] = useState<any>(null);
   const [loadingSignal, setLoadingSignal] = useState(false);
 
-  // Popular trading pairs
   const popularCoins: Coin[] = [
     { symbol: 'BTCUSDT', name: 'Bitcoin', price: 43500 },
     { symbol: 'ETHUSDT', name: 'Ethereum', price: 2280 },
@@ -85,6 +85,13 @@ export const TradingForm = () => {
     }
   };
 
+  const roundDownToLotSize = (qty: number, stepSize: number) => {
+    if (!stepSize || stepSize <= 0) return qty;
+    const precision = Math.max(0, Math.ceil(-Math.log10(stepSize)));
+    const factor = Math.pow(10, precision);
+    return Math.floor(qty * factor) / factor;
+  };
+
   const handleSubmit = async () => {
     if (!selectedExchange || !selectedCoin || !amount) {
       toast.error(t('trading.fill_all_fields'));
@@ -101,21 +108,60 @@ export const TradingForm = () => {
       const exchange = exchanges.find(e => e.id === selectedExchange);
       if (!exchange) throw new Error('Exchange not found');
 
+      let price = coins.find(c => c.symbol === selectedCoin)?.price;
+      if (!price) {
+        const tickerResp = await botAPI.getTicker(exchange.name.toLowerCase(), selectedCoin);
+        price = tickerResp.data.price;
+      }
+
+      let quantity = 0;
+      const parsedAmount = parseFloat(amount);
+      if (amountType === 'quote') {
+        quantity = parsedAmount / price;
+      } else {
+        quantity = parsedAmount;
+      }
+
+      const marketResp = await botAPI.getMarket(exchange.name.toLowerCase(), selectedCoin);
+      const market = marketResp.data.market || {};
+      const stepSize = parseFloat(market.stepSize || market.lotSize || '0.00000001');
+      const minQty = parseFloat(market.minQty || market.minQuantity || '0');
+
+      const roundedQty = roundDownToLotSize(quantity, stepSize);
+
+      if (roundedQty < minQty || roundedQty === 0) {
+        toast.error(`Girdiğiniz miktar seçilen piyasaya göre çok küçük. Minimum: ${minQty} ${selectedCoin.replace(/USDT$/,'')}`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (amountType === 'quote') {
+        const balancesResp = await botAPI.getBalance(exchange.name.toLowerCase());
+        const quoteCurrency = selectedCoin.endsWith('USDT') ? 'USDT' : 'USDT';
+        const availableQuote = parseFloat(balancesResp.data?.balances?.[quoteCurrency] || 0);
+        const feeEstimate = Math.max(0.001 * parsedAmount, 1e-6);
+        if (availableQuote < parsedAmount + feeEstimate) {
+          toast.error('Yetersiz bakiye (quote). Lütfen bakiyenizi kontrol edin.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       await openPosition({
         exchange: exchange.name.toLowerCase(),
         symbol: selectedCoin,
         side,
-        amount: parseFloat(amount),
+        amount: roundedQty,
         leverage: parseInt(leverage),
         tpPercentage: parseFloat(tpPercent),
         slPercentage: parseFloat(slPercent),
       });
 
-      // Reset form
       setAmount('');
       setSelectedCoin('');
     } catch (error: any) {
       console.error('Position opening error:', error);
+      toast.error(error.response?.data?.detail || 'Pozisyon açılamadı');
     } finally {
       setIsSubmitting(false);
     }
@@ -150,7 +196,6 @@ export const TradingForm = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Long/Short Tabs */}
         <Tabs value={side} onValueChange={(v) => setSide(v as 'LONG' | 'SHORT')}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="LONG" className="data-[state=active]:bg-success/20 data-[state=active]:text-success">
@@ -164,7 +209,6 @@ export const TradingForm = () => {
           </TabsList>
         </Tabs>
 
-        {/* Exchange Selection */}
         <div className="space-y-2">
           <Label>{t('trading.exchange')}</Label>
           <Select value={selectedExchange} onValueChange={setSelectedExchange}>
@@ -181,7 +225,6 @@ export const TradingForm = () => {
           </Select>
         </div>
 
-        {/* Coin Selection */}
         <div className="space-y-2">
           <Label>{t('trading.trading_pair')}</Label>
           <Select value={selectedCoin} onValueChange={setSelectedCoin} disabled={loadingCoins}>
@@ -198,7 +241,6 @@ export const TradingForm = () => {
           </Select>
         </div>
 
-        {/* Interval Selection */}
         <div className="space-y-2">
           <Label>{t('trading.interval')}</Label>
           <Select value={interval} onValueChange={setInterval}>
@@ -215,7 +257,6 @@ export const TradingForm = () => {
           </Select>
         </div>
 
-        {/* EMA Signal */}
         {emaSignal && (
           <div className={`p-3 rounded-lg border ${
             emaSignal.signal === 'BUY' ? 'bg-success/10 border-success' :
@@ -238,58 +279,40 @@ export const TradingForm = () => {
           </div>
         )}
 
-        {/* Amount & Leverage */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>{t('trading.amount')} (USDT)</Label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2 md:col-span-2">
+            <Label>{t('trading.amount')}</Label>
             <Input
               type="number"
-              step="0.01"
+              step="0.0001"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="100"
             />
           </div>
           <div className="space-y-2">
-            <Label>{t('trading.leverage')}x</Label>
-            <Select value={leverage} onValueChange={setLeverage}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+            <Label>Amount Type</Label>
+            <Select value={amountType} onValueChange={(v) => setAmountType(v as 'quote' | 'base')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[1, 2, 3, 5, 10, 20, 50, 100].map((lev) => (
-                  <SelectItem key={lev} value={lev.toString()}>
-                    {lev}x
-                  </SelectItem>
-                ))}
+                <SelectItem value="quote">Quote (USDT)</SelectItem>
+                <SelectItem value="base">Base (Coin quantity)</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {/* TP/SL */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>{t('trading.take_profit')} (%)</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={tpPercent}
-              onChange={(e) => setTpPercent(e.target.value)}
-            />
+            <Input type="number" step="0.1" value={tpPercent} onChange={(e) => setTpPercent(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>{t('trading.stop_loss')} (%)</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={slPercent}
-              onChange={(e) => setSlPercent(e.target.value)}
-            />
+            <Input type="number" step="0.1" value={slPercent} onChange={(e) => setSlPercent(e.target.value)} />
           </div>
         </div>
 
-        {/* TP/SL Calculator */}
         {selectedCoin && amount && (
           <TPSLCalculator
             amount={parseFloat(amount)}
@@ -301,7 +324,6 @@ export const TradingForm = () => {
           />
         )}
 
-        {/* Submit Button */}
         <Button
           className="w-full"
           size="lg"
@@ -334,3 +356,5 @@ export const TradingForm = () => {
     </Card>
   );
 };
+
+export default TradingForm;
