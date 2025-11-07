@@ -5,12 +5,13 @@ Provides a consistent interface for all exchange operations with:
 - Rate limiting
 - Error normalization
 - Logging
+- User-based caching
 """
 
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Callable, Union # Union eklendi
+from typing import Dict, List, Optional, Callable, Union
 from datetime import datetime
 from functools import wraps
 
@@ -19,17 +20,14 @@ logger = logging.getLogger(__name__)
 
 class ExchangeError(Exception):
     """Base exception for exchange errors"""
-    # DÜZELTME: exchange için Union[str, object] kullanıldı ve içeride güvenli kontrol eklendi.
-    # Bu, decoratorden yanlışlıkla 'self' nesnesinin geçirilmesi durumunda çökmeyi önler.
     def __init__(self, exchange: Union[str, object], message: str, original_error: Optional[Exception] = None):
-        # Borsa adının string olduğundan emin olun, aksi takdirde "UNKNOWN" olarak ayarlanır.
+        # Ensure exchange name is a string, otherwise set to "UNKNOWN"
         exchange_name = str(exchange).lower() if isinstance(exchange, str) else "UNKNOWN"
         
         self.exchange = exchange_name
         self.message = message
         self.original_error = original_error
         
-        # self.exchange'i (artık güvenli bir string) kullanarak mesajı oluşturun
         super().__init__(f"[{self.exchange.upper()}] {message}")
 
 
@@ -96,8 +94,6 @@ def retry_with_backoff(
                                 message=f"Rate limit exceeded after {max_retries} retries",
                                 original_error=e
                             )
-                        # ExchangeError sınıfındaki düzeltme sayesinde, args[0] 'self' olsa bile 
-                        # AttributeError almayacağız.
                         raise ExchangeError(
                             exchange=args[0] if args else "unknown",
                             message=f"Operation failed after {max_retries} retries: {str(e)}",
@@ -117,10 +113,9 @@ class UnifiedExchangeService:
         self._last_request_time: Dict[str, float] = {}
         self._min_request_interval = 0.1  # 100ms between requests
         
-        # YENİ: Bakiye önbelleği (cache) ve süresi eklendi.
-        # Kullanıcı talebi üzerine, aşırı yüklenmeyi önlemek için önbellek süresi 15 saniyeden 120 saniyeye (2 dakika) çıkarıldı.
+        # ✅ Balance cache with user-based keys
         self._balance_cache: Dict[str, Dict] = {}
-        self._cache_duration_seconds = 120 # Bakiye verilerini 120 saniye (2 dakika) boyunca önbellekte tut
+        self._cache_duration_seconds = 120  # Cache balance data for 120 seconds (2 minutes)
 
     async def _rate_limit(self, exchange: str):
         """Apply rate limiting between requests"""
@@ -140,7 +135,8 @@ class UnifiedExchangeService:
         api_key: str,
         api_secret: str,
         is_futures: bool = True,
-        passphrase: str = ""
+        passphrase: str = "",
+        user_id: str = None  # ✅ NEW PARAMETER
     ) -> Dict:
         """
         Get account balance with unified response format
@@ -157,32 +153,29 @@ class UnifiedExchangeService:
         }
         """
         exchange_name = str(exchange).lower()
-        # API anahtarı ve hesap tipine göre önbellek anahtarı oluştur
-        cache_key = f"{exchange_name}_{api_key}_{'futures' if is_futures else 'spot'}"
+        
+        # ✅ Create cache key using user_id (instead of api_key)
+        cache_key = f"{user_id or 'anonymous'}_{exchange_name}_{'futures' if is_futures else 'spot'}"
 
-        # 1. Önbellek kontrolü
+        # 1. Check cache
         cached_data = self._balance_cache.get(cache_key)
         if cached_data:
             cache_timestamp = cached_data.get("timestamp_fetch", 0)
-            # Eğer önbellek süresi dolmadıysa, önbellekten dön
+            # If cache is still valid, return cached data
             if time.time() - cache_timestamp < self._cache_duration_seconds:
-                logger.info(f"Using cached balance for {exchange_name} ({['spot', 'futures'][is_futures]})")
+                logger.info(f"Using cached balance for {exchange_name} (user: {user_id})")
                 return cached_data['data']
 
-        # Eğer önbellek yoksa veya süresi dolduysa, API limitini uygula ve sorgula
-        await self._rate_limit(exchange)
+        # If no cache or expired, apply rate limit and fetch from API
+        await self._rate_limit(exchange_name)
 
         try:
-            logger.info(f"Fetching balance from {exchange_name} ({['spot', 'futures'][is_futures]})")
+            logger.info(f"Fetching balance from {exchange_name} ({['spot', 'futures'][is_futures]}) for user: {user_id}")
 
             if exchange_name == "binance":
                 from backend.services import binance_service
                 result = await binance_service.get_balance(api_key, api_secret, is_futures)
-                
-                # Ham sonucu kaydetmek için logger'ı kullanmaya devam edin
                 logger.info(f"Raw balance result from {exchange_name}: {result}")
-                
-                # Hata ayıklama (print) satırı kaldırıldı.
 
             elif exchange_name == "bybit":
                 from backend.services import bybit_service
@@ -204,7 +197,6 @@ class UnifiedExchangeService:
                 raise ExchangeError(exchange_name, f"Unsupported exchange: {exchange_name}")
 
             # Normalize response
-            # Buradaki mantık, binance_service'den gelen normalleştirilmiş formata uymaktadır.
             current_timestamp = datetime.utcnow().isoformat()
             normalized = {
                 "exchange": exchange_name,
@@ -218,10 +210,10 @@ class UnifiedExchangeService:
 
             logger.info(
                 f"Balance fetched from {exchange_name}: "
-                f"{normalized['available']:.2f} {normalized['currency']} available"
+                f"{normalized['available']:.2f} {normalized['currency']} available (user: {user_id})"
             )
             
-            # 2. Yeni veriyi önbelleğe kaydet
+            # 2. ✅ Store new data in cache
             self._balance_cache[cache_key] = {
                 "timestamp_fetch": time.time(),
                 "data": normalized
