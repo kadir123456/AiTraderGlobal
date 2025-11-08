@@ -42,7 +42,7 @@ const Dashboard = () => {
   const { exchanges, loading: exchangesLoading } = useExchanges();
   const [accountType, setAccountType] = useState<'spot' | 'futures'>('futures');
   
-  // ✅ exchangeNames memoize edildi - Gereksiz re-render önlendi
+  // ✅ exchangeNames memoize edildi
   const exchangeNames = useMemo(() => {
     return exchanges.map(ex => ex.name);
   }, [exchanges]);
@@ -104,7 +104,7 @@ const Dashboard = () => {
     navigate('/');
   };
 
-  // ✅ Refresh fonksiyonu - toast bildirimi eklendi
+  // ✅ Refresh fonksiyonu
   const handleRefreshBalances = useCallback(async () => {
     try {
       await refreshBalances();
@@ -114,7 +114,7 @@ const Dashboard = () => {
     }
   }, [refreshBalances]);
 
-  // Quick links to moved settings tabs
+  // Quick links to settings tabs
   const quickLinks = [
     { key: 'exchanges', label: '🏦 Borsalar', icon: <Wallet className="h-5 w-5 text-primary" />, to: '/settings?tab=exchanges' },
     { key: 'trading', label: '📊 Manuel İşlem', icon: <TrendingUp className="h-5 w-5 text-primary" />, to: '/settings?tab=trading' },
@@ -222,58 +222,6 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* User Info - For Admin Setup */}
-        {user && (
-          <Card className="border-border bg-card/50 backdrop-blur-sm mb-4">
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">User ID:</span>
-                  <code className="bg-muted px-2 py-1 rounded font-mono">{user.uid}</code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(user.uid);
-                      toast.success('User ID copied!');
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="font-medium">{user.email}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* How to Use */}
-        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
-          <CardHeader>
-            <CardTitle className="text-lg sm:text-xl">{t('dashboard.how_to_use')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal pl-5 space-y-2 text-sm text-muted-foreground">
-              <li>{t('dashboard.how_to_step1')}</li>
-              <li>{t('dashboard.how_to_step2')}</li>
-              <li>{t('dashboard.how_to_step3')}</li>
-              <li>{t('dashboard.how_to_step4')}</li>
-            </ol>
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <Button size="sm" onClick={() => navigate('/settings')}>
-                {t('dashboard.go_to_settings')}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => navigate('/trading')}>
-                {t('dashboard.go_to_trading')}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {(positionsLoading || planLoading) ? (
@@ -291,7 +239,7 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Quick Access Grid (moved from Settings) */}
+        {/* Quick Access Grid */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Hızlı Erişim</h3>
@@ -374,7 +322,7 @@ const Dashboard = () => {
         </div>
 
         {/* Open Positions */}
-        <Card className="border-border bg-card/50 backdrop-blur-sm">
+        <Card className="border-border bg-card/50 backdrop-blur-sm mb-8">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl">{t('dashboard.positions_title')}</CardTitle>
             <Button 
