@@ -4,6 +4,9 @@ import time
 from typing import Dict, List, Optional
 import httpx
 from urllib.parse import urlencode
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BinanceService:
     SPOT_BASE_URL = "https://api.binance.com"
@@ -130,6 +133,8 @@ class BinanceService:
                             "maxQty": float(lot_size_filter.get("maxQty", 0)) if lot_size_filter else 0,
                             "stepSize": float(lot_size_filter.get("stepSize", 0)) if lot_size_filter else 0,
                             "tickSize": float(price_filter.get("tickSize", 0)) if price_filter else 0,
+                            "pricePrecision": s.get("pricePrecision", 2),
+                            "quantityPrecision": s.get("quantityPrecision", 3),
                         }
                 
                 raise Exception(f"Symbol {symbol} not found")
@@ -165,12 +170,12 @@ class BinanceService:
             base_url = self._get_base_url(is_futures)
             headers = {"X-MBX-APIKEY": self.api_key}
             
-            print(f"[BINANCE] Creating order: {side} {amount} USDT worth of {symbol}")
-            print(f"[BINANCE] Futures: {is_futures}, Leverage: {leverage}x")
+            logger.info(f"[BINANCE] Creating order: {side} {amount} USDT worth of {symbol}")
+            logger.info(f"[BINANCE] Futures: {is_futures}, Leverage: {leverage}x")
             
             # ✅ 1. GET CURRENT PRICE
             current_price = await self.get_current_price(symbol, is_futures)
-            print(f"[BINANCE] Current price: {current_price:.4f} USDT")
+            logger.info(f"[BINANCE] Current price: {current_price:.4f} USDT")
             
             # ✅ 2. GET SYMBOL INFO FOR PRECISION
             symbol_info = await self.get_symbol_info(symbol, is_futures)
@@ -180,11 +185,11 @@ class BinanceService:
             
             # ✅ 3. CALCULATE QUANTITY (USDT -> Coin amount)
             quantity = amount / current_price
-            print(f"[BINANCE] Raw quantity: {quantity:.8f} {base_asset}")
+            logger.info(f"[BINANCE] Raw quantity: {quantity:.8f} {base_asset}")
             
             # ✅ 4. ROUND QUANTITY TO STEP SIZE
             quantity = self._round_quantity(quantity, step_size)
-            print(f"[BINANCE] Rounded quantity: {quantity:.8f} (step: {step_size})")
+            logger.info(f"[BINANCE] Rounded quantity: {quantity:.8f} (step: {step_size})")
             
             # ✅ 5. VALIDATE MINIMUM QUANTITY
             if quantity < min_qty:
@@ -209,7 +214,7 @@ class BinanceService:
                         headers=headers
                     )
                     lev_response.raise_for_status()
-                    print(f"[BINANCE] Leverage set to {leverage}x")
+                    logger.info(f"[BINANCE] Leverage set to {leverage}x")
                 
                 # ✅ Create futures market order with CORRECT QUANTITY
                 order_params = {
@@ -221,7 +226,7 @@ class BinanceService:
                 }
                 order_params["signature"] = self._generate_signature(order_params)
                 
-                print(f"[BINANCE] Sending order: {order_params}")
+                logger.info(f"[BINANCE] Sending order: {order_params}")
                 
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
@@ -233,13 +238,13 @@ class BinanceService:
                     # ✅ DETAILED ERROR LOGGING
                     if response.status_code != 200:
                         error_data = response.json() if response.text else {}
-                        print(f"[BINANCE ERROR] Status: {response.status_code}")
-                        print(f"[BINANCE ERROR] Response: {error_data}")
-                        print(f"[BINANCE ERROR] Message: {error_data.get('msg', 'Unknown error')}")
+                        logger.error(f"[BINANCE ERROR] Status: {response.status_code}")
+                        logger.error(f"[BINANCE ERROR] Response: {error_data}")
+                        logger.error(f"[BINANCE ERROR] Message: {error_data.get('msg', 'Unknown error')}")
                         response.raise_for_status()
                     
                     order_result = response.json()
-                    print(f"[BINANCE] Order created: {order_result.get('orderId')}")
+                    logger.info(f"[BINANCE] Order created: {order_result.get('orderId')}")
                 
                 # Get entry price
                 entry_price = float(order_result.get("avgPrice", 0))
@@ -253,12 +258,12 @@ class BinanceService:
                 if tp_percentage > 0:
                     tp_price = entry_price * (1 + tp_percentage / 100) if side.upper() == "BUY" else entry_price * (1 - tp_percentage / 100)
                     tp_order_id = await self._create_tp_sl_order(symbol, "TAKE_PROFIT_MARKET", quantity, tp_price, side, is_futures)
-                    print(f"[BINANCE] TP order created at {tp_price:.2f} USDT: {tp_order_id}")
+                    logger.info(f"[BINANCE] TP order created at {tp_price:.2f} USDT: {tp_order_id}")
                 
                 if sl_percentage > 0:
                     sl_price = entry_price * (1 - sl_percentage / 100) if side.upper() == "BUY" else entry_price * (1 + sl_percentage / 100)
                     sl_order_id = await self._create_tp_sl_order(symbol, "STOP_MARKET", quantity, sl_price, side, is_futures)
-                    print(f"[BINANCE] SL order created at {sl_price:.2f} USDT: {sl_order_id}")
+                    logger.info(f"[BINANCE] SL order created at {sl_price:.2f} USDT: {sl_order_id}")
                 
                 return {
                     **order_result,
@@ -287,20 +292,20 @@ class BinanceService:
                     
                     if response.status_code != 200:
                         error_data = response.json() if response.text else {}
-                        print(f"[BINANCE ERROR] Status: {response.status_code}")
-                        print(f"[BINANCE ERROR] Response: {error_data}")
+                        logger.error(f"[BINANCE ERROR] Status: {response.status_code}")
+                        logger.error(f"[BINANCE ERROR] Response: {error_data}")
                         response.raise_for_status()
                     
                     order_result = response.json()
-                    print(f"[BINANCE] Spot order created: {order_result.get('orderId')}")
+                    logger.info(f"[BINANCE] Spot order created: {order_result.get('orderId')}")
                     return order_result
                      
         except httpx.HTTPStatusError as e:
             error_detail = e.response.json() if e.response.text else {}
-            print(f"[BINANCE ERROR] HTTP {e.response.status_code}: {error_detail}")
+            logger.error(f"[BINANCE ERROR] HTTP {e.response.status_code}: {error_detail}")
             raise Exception(f"Binance order error: {error_detail.get('msg', str(e))}")
         except Exception as e:
-            print(f"[BINANCE ERROR] Order failed: {str(e)}")
+            logger.error(f"[BINANCE ERROR] Order failed: {str(e)}")
             raise Exception(f"Binance order error: {str(e)}")
     
     async def _create_tp_sl_order(self, symbol: str, order_type: str, quantity: float, trigger_price: float, original_side: str, is_futures: bool) -> Optional[str]:
@@ -343,13 +348,13 @@ class BinanceService:
                 return str(result.get("orderId"))
                 
         except Exception as e:
-            print(f"[BINANCE ERROR] TP/SL order failed: {str(e)}")
+            logger.error(f"[BINANCE ERROR] TP/SL order failed: {str(e)}")
             return None
     
     async def close_position(self, symbol: str, is_futures: bool = False) -> Dict:
         """Close position by creating opposite market order"""
         try:
-            print(f"[BINANCE] Closing position: {symbol}")
+            logger.info(f"[BINANCE] Closing position: {symbol}")
             
             if not is_futures:
                 raise Exception("Spot doesn't have positions to close")
@@ -385,7 +390,7 @@ class BinanceService:
                 )
                 response.raise_for_status()
                 result = response.json()
-                print(f"[BINANCE] Position closed: {result.get('orderId')}")
+                logger.info(f"[BINANCE] Position closed: {result.get('orderId')}")
                 
                 # Cancel all open orders for this symbol
                 await self.cancel_all_orders(symbol, is_futures)
@@ -393,13 +398,13 @@ class BinanceService:
                 return result
                 
         except Exception as e:
-            print(f"[BINANCE ERROR] Close position failed: {str(e)}")
+            logger.error(f"[BINANCE ERROR] Close position failed: {str(e)}")
             raise Exception(f"Binance close position error: {str(e)}")
     
     async def cancel_all_orders(self, symbol: str, is_futures: bool = False) -> bool:
         """Cancel all open orders for a symbol (including orphan TP/SL)"""
         try:
-            print(f"[BINANCE] Cancelling all orders for {symbol}")
+            logger.info(f"[BINANCE] Cancelling all orders for {symbol}")
             
             base_url = self._get_base_url(is_futures)
             endpoint = "/fapi/v1/allOpenOrders" if is_futures else "/api/v3/openOrders"
@@ -419,11 +424,11 @@ class BinanceService:
                     headers=headers
                 )
                 response.raise_for_status()
-                print(f"[BINANCE] All orders cancelled for {symbol}")
+                logger.info(f"[BINANCE] All orders cancelled for {symbol}")
                 return True
                 
         except Exception as e:
-            print(f"[BINANCE ERROR] Cancel orders failed: {str(e)}")
+            logger.error(f"[BINANCE ERROR] Cancel orders failed: {str(e)}")
             return False
     
     async def get_positions(self, is_futures: bool = False) -> List[Dict]:
@@ -471,6 +476,10 @@ class BinanceService:
             raise Exception(f"Binance positions error: {str(e)}")
 
 
+# ============================================
+# MODULE-LEVEL FUNCTIONS (API)
+# ============================================
+
 async def get_balance(api_key: str, api_secret: str, is_futures: bool = False) -> Dict:
     service = BinanceService(api_key, api_secret)
     return await service.get_balance(is_futures)
@@ -500,3 +509,93 @@ async def get_current_price(api_key: str, api_secret: str, symbol: str, is_futur
 async def close_position(api_key: str, api_secret: str, symbol: str, is_futures: bool = False) -> Dict:
     service = BinanceService(api_key, api_secret)
     return await service.close_position(symbol, is_futures)
+
+async def set_leverage(api_key: str, api_secret: str, symbol: str, leverage: int, is_futures: bool = True) -> bool:
+    """
+    ✅ SET LEVERAGE - Missing function that was causing the error!
+    """
+    service = BinanceService(api_key, api_secret)
+    
+    try:
+        if not is_futures:
+            logger.warning("Leverage can only be set for futures trading")
+            return False
+        
+        base_url = service.FUTURES_BASE_URL
+        params = {
+            "symbol": symbol,
+            "leverage": leverage,
+            "timestamp": int(time.time() * 1000)
+        }
+        params["signature"] = service._generate_signature(params)
+        
+        headers = {"X-MBX-APIKEY": api_key}
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{base_url}/fapi/v1/leverage",
+                data=params,
+                headers=headers
+            )
+            response.raise_for_status()
+            logger.info(f"[BINANCE] Leverage set to {leverage}x for {symbol}")
+            return True
+            
+    except Exception as e:
+        logger.error(f"[BINANCE ERROR] Set leverage failed: {str(e)}")
+        return False
+
+async def get_market_info(api_key: str, api_secret: str, symbol: str, is_futures: bool = True) -> Dict:
+    """
+    ✅ GET MARKET INFO - This is the missing getMarket function!
+    Returns min/max lot size, price precision, etc.
+    """
+    service = BinanceService(api_key, api_secret)
+    return await service.get_symbol_info(symbol, is_futures)
+
+async def open_position(
+    api_key: str,
+    api_secret: str,
+    symbol: str,
+    side: str,
+    amount: float,
+    leverage: int = 10,
+    take_profit: float = None,
+    stop_loss: float = None,
+    is_futures: bool = True
+) -> Dict:
+    """
+    ✅ OPEN POSITION - Wrapper for create_order with better naming
+    
+    Args:
+        api_key: API key
+        api_secret: API secret
+        symbol: Trading pair (e.g., BTCUSDT)
+        side: BUY, SELL, LONG, or SHORT
+        amount: Amount in USDT
+        leverage: Leverage (default: 10)
+        take_profit: Take profit percentage (e.g., 5 for 5%)
+        stop_loss: Stop loss percentage (e.g., 2 for 2%)
+        is_futures: True for futures trading
+    
+    Returns:
+        Order result dictionary
+    """
+    # Normalize side
+    if side.upper() == "LONG":
+        side = "BUY"
+    elif side.upper() == "SHORT":
+        side = "SELL"
+    
+    # Use create_order function
+    return await create_order(
+        api_key=api_key,
+        api_secret=api_secret,
+        symbol=symbol,
+        side=side,
+        amount=amount,
+        leverage=leverage,
+        is_futures=is_futures,
+        tp_percentage=take_profit or 0,
+        sl_percentage=stop_loss or 0
+    )

@@ -10,13 +10,11 @@ import useDemoTrading from "@/hooks/useDemoTrading";
 
 /**
  * AutoTrading UI
+ * ✅ FIXED: Empty SelectItem value error
+ * ✅ FIXED: API endpoints
  * - Shows market type (spot/futures), exchange selector and coin selector
  * - For free users (demo mode) starts a demo runner (10000 USDT)
  * - For paid users calls backend to enable/disable auto trading
- *
- * Notes:
- * - This component expects botAPI.getExchangeMarkets and botAPI.setAutoTrading endpoints to exist.
- * - If your backend uses other endpoint names adjust botAPI calls accordingly.
  */
 
 const AutoTradingToggle: React.FC = () => {
@@ -26,7 +24,7 @@ const AutoTradingToggle: React.FC = () => {
   const demo = tier === "free";
 
   const [enabled, setEnabled] = useState(false);
-  const [marketType, setMarketType] = useState<"spot" | "futures">("spot");
+  const [marketType, setMarketType] = useState<"spot" | "futures">("futures");
   const [selectedExchangeId, setSelectedExchangeId] = useState<string>("");
   const [selectedCoin, setSelectedCoin] = useState<string>("");
   const [availableCoins, setAvailableCoins] = useState<string[]>([]);
@@ -55,7 +53,17 @@ const AutoTradingToggle: React.FC = () => {
         }
       } catch (err) {
         console.warn("Failed to load markets for exchange:", err);
-        setAvailableCoins([]);
+        // ✅ FIXED: Fallback to common coins if API fails
+        setAvailableCoins([
+          "BTCUSDT",
+          "ETHUSDT",
+          "BNBUSDT",
+          "ADAUSDT",
+          "SOLUSDT",
+          "XRPUSDT",
+          "DOTUSDT",
+          "DOGEUSDT",
+        ]);
       }
     };
     loadSymbols();
@@ -120,7 +128,7 @@ const AutoTradingToggle: React.FC = () => {
       <div className="flex items-center justify-between mb-3">
         <div>
           <h4 className="font-semibold">🤖 Otomatik Al-Sat</h4>
-          <p className="text-sm text-muted-foreground">EMA 9/21 crossover (örnek). Spot ve Futures desteklenir.</p>
+          <p className="text-sm text-muted-foreground">EMA 9/21 crossover stratejisi. Spot ve Futures desteklenir.</p>
         </div>
         <div>
           <span className={`px-3 py-1 rounded ${enabled ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"}`}>
@@ -147,14 +155,20 @@ const AutoTradingToggle: React.FC = () => {
           <label className="text-sm block mb-1">Exchange</label>
           <Select value={selectedExchangeId} onValueChange={setSelectedExchangeId}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Exchange seçin" />
             </SelectTrigger>
             <SelectContent>
-              {exchanges.map((ex) => (
-                <SelectItem key={ex.id} value={ex.id}>
-                  {ex.name}
+              {exchanges.length === 0 ? (
+                <SelectItem value="no-exchange" disabled>
+                  Exchange bulunamadı
                 </SelectItem>
-              ))}
+              ) : (
+                exchanges.map((ex) => (
+                  <SelectItem key={ex.id} value={ex.id}>
+                    {ex.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -163,11 +177,13 @@ const AutoTradingToggle: React.FC = () => {
           <label className="text-sm block mb-1">Coin</label>
           <Select value={selectedCoin} onValueChange={setSelectedCoin}>
             <SelectTrigger>
-              <SelectValue placeholder="Seçin" />
+              <SelectValue placeholder="Coin seçin" />
             </SelectTrigger>
             <SelectContent>
               {availableCoins.length === 0 ? (
-                <SelectItem value="">-- coin yok --</SelectItem>
+                <SelectItem value="no-coin" disabled>
+                  Coin yükleniyor...
+                </SelectItem>
               ) : (
                 availableCoins.map((s) => (
                   <SelectItem key={s} value={s}>
