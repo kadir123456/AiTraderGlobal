@@ -1,491 +1,360 @@
-/**
- * AutoTradingToggle Component
- * ✅ COMPLETE VERSION - NO MISSING CODE
- */
-
-import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Bot, AlertCircle, TrendingUp, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { useSubscription } from '@/hooks/useSubscription';
-import { useExchanges } from '@/hooks/useExchanges';
-import { useAuth } from '@/contexts/AuthContext';
-import { botAPI } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { Loader2, Plus, X, TrendingUp, Clock, DollarSign } from 'lucide-react';
+import api from '@/lib/api';
 
-const AutoTradingToggle: React.FC = () => {
-  const { tier, plan, canAccessFeature } = useSubscription();
-  const { exchanges } = useExchanges();
-  const { user } = useAuth();
+interface AutoTradingSettings {
+  enabled: boolean;
+  watchlist: string[];
+  interval: string;
+  default_amount: number;
+  default_leverage: number;
+  default_tp: number;
+  default_sl: number;
+  exchange: string;
+}
 
+interface Signal {
+  id: string;
+  symbol: string;
+  signal_type: 'bullish' | 'bearish';
+  ema9: number;
+  ema21: number;
+  price: number;
+  exchange: string;
+  interval: string;
+  timestamp: number;
+  action_taken: boolean;
+}
+
+export const AutoTradingToggle = () => {
+  const { t } = useTranslation();
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [marketType, setMarketType] = useState<'spot' | 'futures'>('futures');
-  const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
-  const [selectedCoin, setSelectedCoin] = useState<string>('');
-  const [availableCoins, setAvailableCoins] = useState<string[]>([]);
-  const [loadingCoins, setLoadingCoins] = useState(false);
-  const [status, setStatus] = useState<any>(null);
+  const [settings, setSettings] = useState<AutoTradingSettings>({
+    enabled: false,
+    watchlist: ['BTCUSDT', 'ETHUSDT'],
+    interval: '15m',
+    default_amount: 10,
+    default_leverage: 10,
+    default_tp: 5,
+    default_sl: 2,
+    exchange: 'binance',
+  });
+  const [newSymbol, setNewSymbol] = useState('');
+  const [signals, setSignals] = useState<Signal[]>([]);
 
-  const canAccess = canAccessFeature && (canAccessFeature as any)('autoTrading');
-
-  // Auto-select first exchange
   useEffect(() => {
-    if (exchanges.length > 0 && !selectedExchangeId) {
-      setSelectedExchangeId(exchanges[0].id);
-    }
-  }, [exchanges, selectedExchangeId]);
+    fetchSettings();
+    fetchSignals();
+  }, []);
 
-  // Load coins when exchange changes
-  useEffect(() => {
-    const loadSymbols = async () => {
-      if (!selectedExchangeId) return;
-
-      const ex = exchanges.find((e) => e.id === selectedExchangeId);
-      if (!ex) return;
-
-      setLoadingCoins(true);
-      try {
-        // Check if exchange already has symbols
-        if ((ex as any).symbols && (ex as any).symbols.length > 0) {
-          setAvailableCoins((ex as any).symbols.map((s: any) => s.symbol));
-          return;
-        }
-
-        // Fetch from API
-        const resp = await botAPI.getExchangeMarkets(ex.name.toLowerCase());
-        if (resp?.data?.markets) {
-          setAvailableCoins(resp.data.markets.map((m: any) => m.symbol));
-        }
-      } catch (err) {
-        console.warn('Failed to load markets, using defaults:', err);
-        // Fallback to popular coins
-        setAvailableCoins([
-          'BTCUSDT',
-          'ETHUSDT',
-          'BNBUSDT',
-          'SOLUSDT',
-          'XRPUSDT',
-          'ADAUSDT',
-          'DOGEUSDT',
-          'AVAXUSDT',
-        ]);
-      } finally {
-        setLoadingCoins(false);
-      }
-    };
-
-    loadSymbols();
-  }, [selectedExchangeId, exchanges]);
-
-  // Load current auto-trading settings and status
-  useEffect(() => {
-    const loadSettings = async () => {
-      if (!user) return;
-
-      try {
-        const [settingsResp, statusResp] = await Promise.all([
-          botAPI.getAutoTradingSettings(),
-          botAPI.getAutoTradingStatus(),
-        ]);
-
-        const settings = settingsResp.data;
-        if (settings) {
-          setEnabled(settings.enabled || false);
-          if (settings.watchlist && settings.watchlist.length > 0) {
-            setSelectedCoin(settings.watchlist[0]);
-          }
-          if (settings.exchange) {
-            const exchange = exchanges.find(
-              (e) => e.name.toLowerCase() === settings.exchange.toLowerCase()
-            );
-            if (exchange) {
-              setSelectedExchangeId(exchange.id);
-            }
-          }
-        }
-
-        setStatus(statusResp.data);
-      } catch (err) {
-        console.error('Failed to load auto-trading settings:', err);
-      } finally {
-        setInitialLoading(false);
-      }
-    };
-
-    loadSettings();
-  }, [user, exchanges]);
-
-  // Refresh status every 30 seconds
-  useEffect(() => {
-    if (!user || !enabled) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const statusResp = await botAPI.getAutoTradingStatus();
-        setStatus(statusResp.data);
-      } catch (err) {
-        console.error('Failed to refresh status:', err);
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [user, enabled]);
-
-  /**
-   * Toggle auto-trading on/off
-   */
-  const handleToggle = async () => {
-    if (!canAccess) {
-      toast.error(
-        `Auto-trading requires an active Pro or Enterprise plan. Your current plan: ${tier}`
-      );
-      return;
-    }
-
-    if (!selectedCoin) {
-      toast.error('Please select a coin first');
-      return;
-    }
-
-    if (!selectedExchangeId) {
-      toast.error('Please select an exchange first');
-      return;
-    }
-
-    setLoading(true);
-    
+  const fetchSettings = async () => {
     try {
-      const ex = exchanges.find((e) => e.id === selectedExchangeId);
-      if (!ex) {
-        throw new Error('Exchange not found');
-      }
+      const response = await api.get('/api/auto-trading/settings');
+      setSettings(response.data);
+      setEnabled(response.data.enabled);
+    } catch (error) {
+      console.error('Failed to fetch auto-trading settings:', error);
+    }
+  };
 
-      const newState = !enabled;
+  const fetchSignals = async () => {
+    try {
+      const response = await api.get('/api/auto-trading/signals/history?limit=10');
+      setSignals(response.data.signals || []);
+    } catch (error) {
+      console.error('Failed to fetch signals:', error);
+    }
+  };
 
-      const payload = {
-        enabled: newState,
-        exchange: ex.name.toLowerCase(),
-        market: marketType,
-        symbol: selectedCoin,
-      };
-
-      console.log('🔵 Updating auto-trading settings:', payload);
-
-      const response = await botAPI.setAutoTrading(payload);
-
-      console.log('✅ Auto-trading settings updated:', response.data);
-
-      setEnabled(newState);
-      
-      // Refresh status
-      const statusResp = await botAPI.getAutoTradingStatus();
-      setStatus(statusResp.data);
-      
+  const handleToggle = async (checked: boolean) => {
+    setLoading(true);
+    try {
+      await api.post('/api/auto-trading/settings', {
+        ...settings,
+        enabled: checked,
+      });
+      setEnabled(checked);
       toast.success(
-        newState ? 'Auto-trading enabled' : 'Auto-trading disabled',
-        {
-          description: newState
-            ? `Monitoring ${selectedCoin} on ${ex.name}`
-            : 'All monitoring stopped',
-        }
+        checked 
+          ? 'Otomatik trading aktif edildi!' 
+          : 'Otomatik trading durduruldu'
       );
-    } catch (err: any) {
-      console.error('❌ Failed to update auto-trading:', err);
-      
-      const errorMessage = err.message || 'Failed to update auto-trading';
-      toast.error('Auto-trading update failed', {
-        description: errorMessage,
-      });
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Ayarlar güncellenemedi');
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Emergency stop button
-   */
-  const handleEmergencyStop = async () => {
+  const handleSaveSettings = async () => {
     setLoading(true);
-    
     try {
-      await botAPI.stopAutoTrading();
-      
-      setEnabled(false);
-      setStatus(null);
-      
-      toast.success('Auto-trading stopped immediately', {
-        description: 'All monitoring has been halted',
+      await api.post('/api/auto-trading/settings', {
+        ...settings,
+        enabled,
       });
-    } catch (err) {
-      console.error('Failed to stop auto-trading:', err);
-      toast.error('Failed to stop auto-trading');
+      toast.success('Ayarlar kaydedildi!');
+      fetchSignals();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Ayarlar kaydedilemedi');
     } finally {
       setLoading(false);
     }
   };
 
-  if (initialLoading) {
-    return (
+  const addToWatchlist = () => {
+    if (!newSymbol) return;
+    const symbol = newSymbol.toUpperCase().trim();
+    if (settings.watchlist.includes(symbol)) {
+      toast.error('Bu coin zaten listede!');
+      return;
+    }
+    setSettings({ ...settings, watchlist: [...settings.watchlist, symbol] });
+    setNewSymbol('');
+    toast.success(`${symbol} watchlist'e eklendi`);
+  };
+
+  const removeFromWatchlist = (symbol: string) => {
+    setSettings({
+      ...settings,
+      watchlist: settings.watchlist.filter((s) => s !== symbol),
+    });
+    toast.success(`${symbol} watchlist'ten çıkarıldı`);
+  };
+
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleString('tr-TR');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Main Toggle Card */}
+      <Card className="border-primary/20">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl">Otomatik Trading</CardTitle>
+              <CardDescription>
+                EMA 9/21 crossover stratejisi ile otomatik al-sat
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Label htmlFor="auto-trading" className="text-base">
+                {enabled ? (
+                  <Badge variant="default" className="bg-green-500">Aktif</Badge>
+                ) : (
+                  <Badge variant="secondary">Kapalı</Badge>
+                )}
+              </Label>
+              <Switch
+                id="auto-trading"
+                checked={enabled}
+                onCheckedChange={handleToggle}
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Settings Card */}
       <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardHeader>
+          <CardTitle>Ayarlar</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Watchlist */}
+          <div className="space-y-3">
+            <Label>Watchlist (İzlenecek Coinler)</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="BTCUSDT"
+                value={newSymbol}
+                onChange={(e) => setNewSymbol(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && addToWatchlist()}
+              />
+              <Button onClick={addToWatchlist} size="icon">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {settings.watchlist.map((symbol) => (
+                <Badge key={symbol} variant="secondary" className="gap-1">
+                  {symbol}
+                  <X
+                    className="h-3 w-3 cursor-pointer"
+                    onClick={() => removeFromWatchlist(symbol)}
+                  />
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Exchange */}
+            <div className="space-y-2">
+              <Label>Borsa</Label>
+              <Select
+                value={settings.exchange}
+                onValueChange={(value) => setSettings({ ...settings, exchange: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="binance">Binance</SelectItem>
+                  <SelectItem value="bybit">Bybit</SelectItem>
+                  <SelectItem value="okx">OKX</SelectItem>
+                  <SelectItem value="kucoin">KuCoin</SelectItem>
+                  <SelectItem value="mexc">MEXC</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Interval */}
+            <div className="space-y-2">
+              <Label>Zaman Aralığı</Label>
+              <Select
+                value={settings.interval}
+                onValueChange={(value) => setSettings({ ...settings, interval: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5m">5 Dakika</SelectItem>
+                  <SelectItem value="15m">15 Dakika</SelectItem>
+                  <SelectItem value="30m">30 Dakika</SelectItem>
+                  <SelectItem value="1h">1 Saat</SelectItem>
+                  <SelectItem value="4h">4 Saat</SelectItem>
+                  <SelectItem value="1d">1 Gün</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Default Amount */}
+            <div className="space-y-2">
+              <Label>İşlem Miktarı (USDT)</Label>
+              <Input
+                type="number"
+                value={settings.default_amount}
+                onChange={(e) =>
+                  setSettings({ ...settings, default_amount: parseFloat(e.target.value) })
+                }
+              />
+            </div>
+
+            {/* Default Leverage */}
+            <div className="space-y-2">
+              <Label>Kaldıraç (Leverage)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="125"
+                value={settings.default_leverage}
+                onChange={(e) =>
+                  setSettings({ ...settings, default_leverage: parseInt(e.target.value) })
+                }
+              />
+            </div>
+
+            {/* Take Profit % */}
+            <div className="space-y-2">
+              <Label>Take Profit %</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={settings.default_tp}
+                onChange={(e) =>
+                  setSettings({ ...settings, default_tp: parseFloat(e.target.value) })
+                }
+              />
+            </div>
+
+            {/* Stop Loss % */}
+            <div className="space-y-2">
+              <Label>Stop Loss %</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={settings.default_sl}
+                onChange={(e) =>
+                  setSettings({ ...settings, default_sl: parseFloat(e.target.value) })
+                }
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleSaveSettings} disabled={loading} className="w-full">
+            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Ayarları Kaydet
+          </Button>
         </CardContent>
       </Card>
-    );
-  }
 
-  if (exchanges.length === 0) {
-    return (
+      {/* Recent Signals */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            Auto Trading
+            <TrendingUp className="h-5 w-5" />
+            Son Sinyaller
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Please connect an exchange first to use auto-trading.
-            </AlertDescription>
-          </Alert>
-          <Button
-            className="mt-4 w-full"
-            onClick={() => (window.location.href = '/settings')}
-          >
-            Go to Settings
-          </Button>
+          {signals.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Henüz sinyal yok. Otomatik trading'i aktif edin!
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {signals.map((signal) => (
+                <div
+                  key={signal.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{signal.symbol}</span>
+                      <Badge
+                        variant={signal.signal_type === 'bullish' ? 'default' : 'destructive'}
+                      >
+                        {signal.signal_type === 'bullish' ? '📈 LONG' : '📉 SHORT'}
+                      </Badge>
+                      {signal.action_taken && (
+                        <Badge variant="outline">✅ İşlem Açıldı</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        ${signal.price.toFixed(2)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatTimestamp(signal.timestamp)}
+                      </span>
+                      <span className="text-xs">
+                        EMA9: {signal.ema9.toFixed(2)} / EMA21: {signal.ema21.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge variant="secondary">{signal.exchange}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            Auto Trading
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={enabled}
-              onCheckedChange={handleToggle}
-              disabled={loading || !canAccess}
-            />
-            <span
-              className={`text-sm font-medium flex items-center gap-1 ${
-                enabled ? 'text-success' : 'text-muted-foreground'
-              }`}
-            >
-              {enabled ? (
-                <>
-                  <CheckCircle className="h-4 w-4" />
-                  ON
-                </>
-              ) : (
-                <>
-                  <XCircle className="h-4 w-4" />
-                  OFF
-                </>
-              )}
-            </span>
-          </div>
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Plan Warning */}
-        {!canAccess && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Auto-trading requires an active Pro or Enterprise plan.
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-full"
-                onClick={() => (window.location.href = '/#pricing')}
-              >
-                Upgrade Plan
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Market Type Selection */}
-        <div className="space-y-2">
-          <Label>Market Type</Label>
-          <Select
-            value={marketType}
-            onValueChange={(v) => setMarketType(v as 'spot' | 'futures')}
-            disabled={enabled}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="spot">Spot</SelectItem>
-              <SelectItem value="futures">Futures</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Exchange Selection */}
-        <div className="space-y-2">
-          <Label>Exchange</Label>
-          <Select
-            value={selectedExchangeId}
-            onValueChange={setSelectedExchangeId}
-            disabled={enabled}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select exchange" />
-            </SelectTrigger>
-            <SelectContent>
-              {exchanges.map((ex) => (
-                <SelectItem key={ex.id} value={ex.id}>
-                  {ex.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Coin Selection */}
-        <div className="space-y-2">
-          <Label>Trading Pair</Label>
-          <Select
-            value={selectedCoin}
-            onValueChange={setSelectedCoin}
-            disabled={enabled || loadingCoins}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select coin" />
-            </SelectTrigger>
-            <SelectContent>
-              {loadingCoins ? (
-                <SelectItem value="loading" disabled>
-                  Loading coins...
-                </SelectItem>
-              ) : availableCoins.length === 0 ? (
-                <SelectItem value="empty" disabled>
-                  No coins available
-                </SelectItem>
-              ) : (
-                availableCoins.map((symbol) => (
-                  <SelectItem key={symbol} value={symbol}>
-                    {symbol}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Strategy Info */}
-        <Alert>
-          <TrendingUp className="h-4 w-4" />
-          <AlertDescription>
-            <div className="space-y-1">
-              <p className="font-medium">EMA 9/21 Crossover Strategy</p>
-              <p className="text-sm text-muted-foreground">
-                Automatically opens positions when EMA 9 crosses EMA 21.
-                Default: 10x leverage, 5% TP, 2% SL.
-              </p>
-            </div>
-          </AlertDescription>
-        </Alert>
-
-        {/* Status Info */}
-        {enabled && status && (
-          <div className="p-3 bg-success/10 border border-success rounded-lg space-y-2 text-sm">
-            <div className="flex items-center gap-2 font-semibold text-success">
-              <CheckCircle className="h-4 w-4" />
-              Active Monitoring
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Exchange:</span>
-                <span className="font-medium text-foreground">
-                  {exchanges.find((e) => e.id === selectedExchangeId)?.name}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Symbol:</span>
-                <span className="font-medium text-foreground">{selectedCoin}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Market:</span>
-                <span className="font-medium text-foreground capitalize">{marketType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Monitors:</span>
-                <span className="font-medium text-foreground">{status.active_monitors || 0}</span>
-              </div>
-              <div className="flex justify-between col-span-2">
-                <span>Signals Today:</span>
-                <span className="font-medium text-foreground">{status.signals_today || 0}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          <Button
-            className="flex-1"
-            onClick={handleToggle}
-            disabled={loading || !canAccess || !selectedCoin}
-            variant={enabled ? 'outline' : 'default'}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : enabled ? (
-              'Disable Auto-Trading'
-            ) : (
-              'Enable Auto-Trading'
-            )}
-          </Button>
-
-          {enabled && (
-            <Button
-              variant="destructive"
-              onClick={handleEmergencyStop}
-              disabled={loading}
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              Emergency Stop
-            </Button>
-          )}
-        </div>
-
-        {/* Help Text */}
-        {!enabled && (
-          <p className="text-xs text-muted-foreground text-center">
-            Configure your preferred exchange and coin, then enable auto-trading to start monitoring EMA signals.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    </div>
   );
 };
-
-export default AutoTradingToggle;
