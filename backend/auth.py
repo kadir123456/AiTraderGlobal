@@ -7,6 +7,9 @@ import jwt
 from datetime import datetime, timedelta
 import httpx
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyDqAsiITYyPK9bTuGGz7aVBkZ7oLB2Kt3U")
@@ -64,7 +67,7 @@ async def verify_firebase_token_with_identitytoolkit(id_token: str) -> dict:
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Firebase token verification error: {str(e)}")
+        logger.error(f"Firebase token verification error: {str(e)}")
         raise HTTPException(status_code=401, detail="Failed to verify Firebase token")
 
 async def get_current_user(authorization: str = Header(None)):
@@ -90,6 +93,7 @@ async def get_current_user(authorization: str = Header(None)):
 async def get_user_plan(user_id: str) -> str:
     """
     Get user's subscription plan from Firebase Realtime Database.
+    Path: user_subscriptions/{user_id}
     Returns: 'free', 'pro', or 'enterprise'
     """
     try:
@@ -98,21 +102,29 @@ async def get_user_plan(user_id: str) -> str:
         
         # Initialize Firebase Admin if not already done
         try:
-            firebase_admin.get_app()
+            app = firebase_admin.get_app()
+            logger.info(f"✅ Firebase Admin already initialized")
         except ValueError:
-            # App not initialized
-            import firebase_admin
+            # App not initialized - initialize now
+            logger.info(f"🔧 Initializing Firebase Admin...")
+            
             from firebase_admin import credentials
             
             firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
             if not firebase_db_url:
+                logger.error("❌ FIREBASE_DATABASE_URL not set")
                 return "free"
+            
+            # Get service account credentials from environment
+            private_key = os.getenv("FIREBASE_PRIVATE_KEY", "")
+            if private_key:
+                private_key = private_key.replace("\\n", "\n")
             
             cred = credentials.Certificate({
                 "type": "service_account",
                 "project_id": os.getenv("FIREBASE_PROJECT_ID"),
                 "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-                "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
+                "private_key": private_key,
                 "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
                 "client_id": os.getenv("FIREBASE_CLIENT_ID"),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -122,18 +134,34 @@ async def get_user_plan(user_id: str) -> str:
             firebase_admin.initialize_app(cred, {
                 'databaseURL': firebase_db_url
             })
+            
+            logger.info(f"✅ Firebase Admin initialized successfully")
         
-        # Get subscription from Firebase
-        ref = db.reference(f'/user_subscriptions/{user_id}')
+        # Get subscription from Firebase: user_subscriptions/{user_id}
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
+        ref = db.reference(f'user_subscriptions/{user_id}', url=firebase_db_url)
         subscription = ref.get()
         
         if subscription and isinstance(subscription, dict):
-            return subscription.get('tier', 'free')
+            tier = subscription.get('tier', 'free')
+            status = subscription.get('status', 'active')
+            
+            logger.info(f"✅ User {user_id} subscription: {tier} ({status})")
+            
+            # Only return plan if status is active
+            if status == 'active':
+                return tier
+            else:
+                logger.warning(f"⚠️ User {user_id} has {tier} but status is {status}")
+                return 'free'
         
+        logger.warning(f"⚠️ No subscription found for user {user_id}")
         return "free"
         
     except Exception as e:
-        print(f"Error fetching user plan: {str(e)}")
+        logger.error(f"❌ Error fetching user plan: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return "free"
 
 def check_plan_limits(plan: str, current_positions: int) -> dict:
@@ -162,6 +190,60 @@ def check_plan_limits(plan: str, current_positions: int) -> dict:
         "message": f"Your {plan.upper()} plan allows {max_positions} open position(s). Currently: {current_positions}"
     }
 
+async def check_feature_access(user_id: str, feature: str) -> bool:
+    """
+    Check if user can access a specific feature based on their plan
+    
+    Features:
+    - auto_trading: Pro and Enterprise only
+    - auto_trading_spot: Pro and Enterprise
+    - auto_trading_futures: Pro and Enterprise
+    - multi_exchange: Returns number of exchanges allowed
+    - custom_strategies: Pro and Enterprise
+    - api_access: Enterprise only
+    """
+    plan = await get_user_plan(user_id)
+    
+    logger.info(f"🔐 Checking feature '{feature}' for user {user_id} (plan: {plan})")
+    
+    feature_matrix = {
+        'free': {
+            'auto_trading': False,
+            'auto_trading_spot': False,
+            'auto_trading_futures': False,
+            'multi_exchange': 1,  # Only 1 exchange
+            'custom_strategies': False,
+            'api_access': False,
+            'spot_trading': True,
+            'futures_trading': False,
+        },
+        'pro': {
+            'auto_trading': True,
+            'auto_trading_spot': True,
+            'auto_trading_futures': True,
+            'multi_exchange': 3,  # Up to 3 exchanges
+            'custom_strategies': True,
+            'api_access': False,
+            'spot_trading': True,
+            'futures_trading': True,
+        },
+        'enterprise': {
+            'auto_trading': True,
+            'auto_trading_spot': True,
+            'auto_trading_futures': True,
+            'multi_exchange': 5,  # All 5 exchanges
+            'custom_strategies': True,
+            'api_access': True,
+            'spot_trading': True,
+            'futures_trading': True,
+        }
+    }
+    
+    has_access = feature_matrix[plan].get(feature, False)
+    logger.info(f"{'✅' if has_access else '❌'} User {user_id} {'CAN' if has_access else 'CANNOT'} access '{feature}'")
+    
+    return has_access
+
 async def set_user_plan(user_id: str, plan: str) -> dict:
     """
     Set user's subscription plan in Firebase (Admin function)
@@ -179,8 +261,10 @@ async def set_user_plan(user_id: str, plan: str) -> dict:
         except ValueError:
             return {"success": False, "error": "Firebase not initialized"}
         
-        # Set subscription in Firebase
-        ref = db.reference(f'/user_subscriptions/{user_id}')
+        # Set subscription in Firebase: user_subscriptions/{user_id}
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
+        ref = db.reference(f'user_subscriptions/{user_id}', url=firebase_db_url)
+        
         subscription_data = {
             'tier': plan,
             'startDate': datetime.utcnow().isoformat(),
@@ -194,6 +278,8 @@ async def set_user_plan(user_id: str, plan: str) -> dict:
         
         ref.set(subscription_data)
         
+        logger.info(f"✅ Updated user {user_id} to {plan} plan")
+        
         return {
             "success": True,
             "plan": plan,
@@ -201,5 +287,5 @@ async def set_user_plan(user_id: str, plan: str) -> dict:
         }
         
     except Exception as e:
-        print(f"Error setting user plan: {str(e)}")
+        logger.error(f"❌ Error setting user plan: {str(e)}")
         return {"success": False, "error": str(e)}

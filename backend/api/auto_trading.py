@@ -1,6 +1,6 @@
 """
 Auto Trading API Endpoints
-✅ FIXED VERSION - Proper EMA Monitor Integration
+✅ FIXED VERSION - With Spot/Futures Separation
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -8,25 +8,36 @@ from typing import Optional, List
 from datetime import datetime
 import logging
 
-from backend.auth import get_current_user
+from backend.auth import get_current_user, check_feature_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auto-trading", tags=["auto-trading"])
 
 
 class AutoTradingSettings(BaseModel):
-    enabled: bool
-    watchlist: List[str]  # ['BTCUSDT', 'ETHUSDT', ...]
-    interval: str  # '15m', '30m', '1h', '4h', '1d'
-    default_amount: float
-    default_leverage: int
-    default_tp: float
-    default_sl: float
-    exchange: str
+    # Spot trading settings
+    spot_enabled: bool = False
+    spot_watchlist: List[str] = []
+    spot_default_amount: float = 10.0
+    spot_default_tp: float = 5.0
+    spot_default_sl: float = 2.0
+    
+    # Futures trading settings
+    futures_enabled: bool = False
+    futures_watchlist: List[str] = []
+    futures_default_amount: float = 10.0
+    futures_default_leverage: int = 10
+    futures_default_tp: float = 5.0
+    futures_default_sl: float = 2.0
+    
+    # Common settings
+    interval: str = '15m'
+    exchange: str = 'binance'
 
 
 class AutoTradingStatus(BaseModel):
-    enabled: bool
+    spot_enabled: bool
+    futures_enabled: bool
     active_monitors: int
     last_check: Optional[str]
     signals_today: int
@@ -37,47 +48,43 @@ async def update_auto_trading_settings(
     settings: AutoTradingSettings,
     current_user = Depends(get_current_user)
 ):
-    """Update user's auto-trading settings"""
+    """Update user's auto-trading settings (spot and futures separately)"""
     try:
-        from backend.firebase_admin import (
-            save_auto_trading_settings, 
-            get_user_api_keys, 
-            get_user_subscription
-        )
-        # ✅ Import ema_monitor properly
-        from backend.services.ema_monitor import ema_monitor
-
+        from firebase_admin import db
+        import os
+        
         user_id = current_user.get('user_id') or current_user.get('id')
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
 
-        # ✅ Check subscription plan - Auto-trading requires Pro or Enterprise
-        if settings.enabled:
-            subscription = get_user_subscription(user_id)
-            
-            # ✅ FIXED: Use 'plan' instead of 'tier' (matches Firebase structure)
-            user_plan = subscription.get('plan', 'free') if subscription else 'free'
-            subscription_status = subscription.get('status', 'inactive') if subscription else 'inactive'
-            
-            # 🔧 DEBUG: Log subscription info
-            logger.info(f"🔍 User {user_id} subscription: {subscription}")
-            logger.info(f"🔍 Plan: {user_plan}, Status: {subscription_status}")
-
-            # ✅ Check if user has an active paid plan
-            is_paid_plan = user_plan.lower() in ['pro', 'enterprise', 'premium', 'business']
-            is_active = subscription_status == 'active'
-            
-            if not (is_paid_plan and is_active):
+        # ✅ Check feature access for spot trading
+        if settings.spot_enabled:
+            can_access_spot = await check_feature_access(user_id, 'auto_trading_spot')
+            if not can_access_spot:
                 raise HTTPException(
                     status_code=403,
                     detail=(
-                        f"Auto-trading requires an active PRO or ENTERPRISE plan. "
-                        f"Your current plan: {user_plan} ({subscription_status}). "
-                        f"Please upgrade to access this feature."
+                        "Spot auto-trading requires an active PRO or ENTERPRISE plan. "
+                        "Please upgrade to access this feature."
                     )
                 )
-
+        
+        # ✅ Check feature access for futures trading
+        if settings.futures_enabled:
+            can_access_futures = await check_feature_access(user_id, 'auto_trading_futures')
+            if not can_access_futures:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Futures auto-trading requires an active PRO or ENTERPRISE plan. "
+                        "Please upgrade to access this feature."
+                    )
+                )
+        
         # ✅ Validate exchange API keys exist
-        if settings.enabled:
-            api_keys = get_user_api_keys(user_id, settings.exchange)
+        if settings.spot_enabled or settings.futures_enabled:
+            api_keys_ref = db.reference(f'api_keys/{user_id}/{settings.exchange}', url=firebase_db_url)
+            api_keys = api_keys_ref.get()
+            
             if not api_keys:
                 raise HTTPException(
                     status_code=400,
@@ -85,46 +92,46 @@ async def update_auto_trading_settings(
                 )
         
         # ✅ Save settings to Firebase
-        saved = save_auto_trading_settings(user_id, settings.dict())
-        if not saved:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to save auto-trading settings"
-            )
-        
-        # ✅ Start or stop monitoring based on enabled flag
-        if settings.enabled:
-            # Get API keys
-            api_keys = get_user_api_keys(user_id, settings.exchange)
+        settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
+        settings_data = {
+            # Spot settings
+            'spot_enabled': settings.spot_enabled,
+            'spot_watchlist': settings.spot_watchlist,
+            'spot_default_amount': settings.spot_default_amount,
+            'spot_default_tp': settings.spot_default_tp,
+            'spot_default_sl': settings.spot_default_sl,
             
-            # Start monitoring for each symbol in watchlist
-            for symbol in settings.watchlist:
-                monitor_config = {
-                    'exchange': settings.exchange,
-                    'api_key': api_keys.get('api_key'),
-                    'api_secret': api_keys.get('api_secret'),
-                    'passphrase': api_keys.get('passphrase', ''),
-                    'symbol': symbol,
-                    'interval': settings.interval,
-                    'auto_trade': True,
-                    'default_amount': settings.default_amount,
-                    'default_leverage': settings.default_leverage,
-                    'default_tp': settings.default_tp,
-                    'default_sl': settings.default_sl
-                }
-                
-                await ema_monitor.start_monitoring(user_id, monitor_config)
-                logger.info(f"✅ Started monitoring {symbol} for user {user_id}")
-        else:
-            # Stop all monitoring for this user
-            await ema_monitor.stop_all_monitoring(user_id)
-            logger.info(f"🛑 Stopped all monitoring for user {user_id}")
+            # Futures settings
+            'futures_enabled': settings.futures_enabled,
+            'futures_watchlist': settings.futures_watchlist,
+            'futures_default_amount': settings.futures_default_amount,
+            'futures_default_leverage': settings.futures_default_leverage,
+            'futures_default_tp': settings.futures_default_tp,
+            'futures_default_sl': settings.futures_default_sl,
+            
+            # Common settings
+            'interval': settings.interval,
+            'exchange': settings.exchange,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        settings_ref.set(settings_data)
+        
+        logger.info(f"✅ Auto-trading settings saved for user {user_id}")
+        logger.info(f"   Spot: {settings.spot_enabled}, Futures: {settings.futures_enabled}")
+        
+        # TODO: Start/stop monitoring based on enabled flags
+        # This will be implemented with EMA monitor integration
         
         return {
             "success": True,
             "message": "Auto-trading settings updated successfully",
-            "enabled": settings.enabled,
-            "active_symbols": len(settings.watchlist) if settings.enabled else 0
+            "spot_enabled": settings.spot_enabled,
+            "futures_enabled": settings.futures_enabled,
+            "active_symbols": {
+                "spot": len(settings.spot_watchlist) if settings.spot_enabled else 0,
+                "futures": len(settings.futures_watchlist) if settings.futures_enabled else 0
+            }
         }
         
     except HTTPException:
@@ -143,30 +150,41 @@ async def get_auto_trading_settings(
 ):
     """Get user's auto-trading settings"""
     try:
-        from backend.firebase_admin import get_auto_trading_settings
+        from firebase_admin import db
+        import os
         
         user_id = current_user.get('user_id') or current_user.get('id')
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
         
         # Get settings from Firebase
-        settings = get_auto_trading_settings(user_id)
+        settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
+        settings = settings_ref.get()
         
         # If no settings exist, return defaults
         if not settings:
             return {
-                "enabled": False,
-                "watchlist": [],
+                # Spot defaults
+                "spot_enabled": False,
+                "spot_watchlist": [],
+                "spot_default_amount": 10.0,
+                "spot_default_tp": 5.0,
+                "spot_default_sl": 2.0,
+                
+                # Futures defaults
+                "futures_enabled": False,
+                "futures_watchlist": [],
+                "futures_default_amount": 10.0,
+                "futures_default_leverage": 10,
+                "futures_default_tp": 5.0,
+                "futures_default_sl": 2.0,
+                
+                # Common defaults
                 "interval": "15m",
-                "default_amount": 10.0,
-                "default_leverage": 10,
-                "default_tp": 5.0,
-                "default_sl": 2.0,
                 "exchange": "binance"
             }
         
         return settings
         
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"❌ Error getting auto-trading settings: {e}", exc_info=True)
         raise HTTPException(
@@ -181,37 +199,45 @@ async def get_auto_trading_status(
 ) -> AutoTradingStatus:
     """Get auto-trading status"""
     try:
-        from backend.firebase_admin import get_auto_trading_settings, get_user_signals
-        from backend.services.ema_monitor import ema_monitor
+        from firebase_admin import db
+        import os
         
         user_id = current_user.get('user_id') or current_user.get('id')
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
         
         # Get settings
-        settings = get_auto_trading_settings(user_id)
-        enabled = settings.get('enabled', False) if settings else False
+        settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
+        settings = settings_ref.get()
+        
+        spot_enabled = settings.get('spot_enabled', False) if settings else False
+        futures_enabled = settings.get('futures_enabled', False) if settings else False
         
         # Count active monitors
         active_monitors = 0
-        if enabled and hasattr(ema_monitor, 'monitoring_tasks'):
-            active_monitors = sum(
-                1 for key in ema_monitor.monitoring_tasks.keys() 
-                if key.startswith(user_id)
-            )
+        if settings:
+            if spot_enabled:
+                active_monitors += len(settings.get('spot_watchlist', []))
+            if futures_enabled:
+                active_monitors += len(settings.get('futures_watchlist', []))
         
         # Get today's signals count
         signals_today = 0
         try:
-            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-            all_signals = get_user_signals(user_id, limit=100)
-            signals_today = sum(
-                1 for s in all_signals 
-                if datetime.fromisoformat(s.get('timestamp', '')) >= today_start
-            )
+            signals_ref = db.reference(f'ema_signals/{user_id}', url=firebase_db_url)
+            all_signals = signals_ref.get()
+            
+            if all_signals:
+                today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+                signals_today = sum(
+                    1 for signal in all_signals.values()
+                    if datetime.fromisoformat(signal.get('created_at', '')) >= today_start
+                )
         except Exception as e:
             logger.warning(f"Could not count today's signals: {e}")
         
         return AutoTradingStatus(
-            enabled=enabled,
+            spot_enabled=spot_enabled,
+            futures_enabled=futures_enabled,
             active_monitors=active_monitors,
             last_check=datetime.utcnow().isoformat(),
             signals_today=signals_today
@@ -232,16 +258,39 @@ async def get_signals_history(
 ):
     """Get signal history"""
     try:
-        from backend.firebase_admin import get_user_signals
+        from firebase_admin import db
+        import os
         
         user_id = current_user.get('user_id') or current_user.get('id')
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
         
         # Get signals from Firebase
-        signals = get_user_signals(user_id, limit)
+        signals_ref = db.reference(f'ema_signals/{user_id}', url=firebase_db_url)
+        all_signals = signals_ref.get()
+        
+        if not all_signals:
+            return {"signals": [], "count": 0}
+        
+        # Convert to list and sort by timestamp
+        signals_list = []
+        for signal_id, signal_data in all_signals.items():
+            signals_list.append({
+                "id": signal_id,
+                **signal_data
+            })
+        
+        # Sort by timestamp descending
+        signals_list.sort(
+            key=lambda x: x.get('created_at', ''),
+            reverse=True
+        )
+        
+        # Limit results
+        signals_list = signals_list[:limit]
         
         return {
-            "signals": signals or [],
-            "count": len(signals) if signals else 0
+            "signals": signals_list,
+            "count": len(signals_list)
         }
         
     except Exception as e:
@@ -258,24 +307,27 @@ async def stop_auto_trading(
 ):
     """Emergency stop - immediately stop all auto-trading"""
     try:
-        from backend.firebase_admin import save_auto_trading_settings, get_auto_trading_settings
-        from backend.services.ema_monitor import ema_monitor
+        from firebase_admin import db
+        import os
         
         user_id = current_user.get('user_id') or current_user.get('id')
+        firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
         
-        # Stop all monitoring
-        await ema_monitor.stop_all_monitoring(user_id)
+        # Update settings to disable both spot and futures
+        settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
+        settings = settings_ref.get() or {}
         
-        # Update settings
-        settings = get_auto_trading_settings(user_id) or {}
-        settings['enabled'] = False
-        save_auto_trading_settings(user_id, settings)
+        settings['spot_enabled'] = False
+        settings['futures_enabled'] = False
+        settings['updated_at'] = datetime.utcnow().isoformat()
+        
+        settings_ref.set(settings)
         
         logger.info(f"🚨 Emergency stop executed for user {user_id}")
         
         return {
             "success": True,
-            "message": "Auto-trading stopped successfully"
+            "message": "Auto-trading stopped successfully (both spot and futures)"
         }
         
     except Exception as e:

@@ -1,4 +1,5 @@
-import { ref, set, get, child, remove } from 'firebase/database';
+// src/lib/firebaseAdmin.ts
+import { ref, set, get, child, remove, update } from 'firebase/database';
 import { database } from './firebase';
 
 export interface UserSubscription {
@@ -17,22 +18,30 @@ export interface AdminUserData {
   role?: 'admin' | 'user';
 }
 
+// Get user subscription
+export async function getUserSubscription(userId: string): Promise<UserSubscription | null> {
+  try {
+    const subscriptionRef = ref(database, `user_subscriptions/${userId}`);
+    const snapshot = await get(subscriptionRef);
+    
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      console.log('✅ Subscription found:', data);
+      return data as UserSubscription;
+    }
+    
+    console.log('⚠️ No subscription found for user:', userId);
+    return null;
+  } catch (error) {
+    console.error('❌ Error fetching subscription:', error);
+    throw error;
+  }
+}
+
 // Set user subscription (admin only)
 export async function setUserSubscription(userId: string, subscription: UserSubscription): Promise<void> {
   const subscriptionRef = ref(database, `user_subscriptions/${userId}`);
   await set(subscriptionRef, subscription);
-}
-
-// Get user subscription
-export async function getUserSubscription(userId: string): Promise<UserSubscription | null> {
-  const subscriptionRef = ref(database, `user_subscriptions/${userId}`);
-  const snapshot = await get(subscriptionRef);
-  
-  if (snapshot.exists()) {
-    return snapshot.val() as UserSubscription;
-  }
-  
-  return null;
 }
 
 // Set user role (admin only)
@@ -51,6 +60,49 @@ export async function getUserRole(userId: string): Promise<string | null> {
   }
   
   return null;
+}
+
+// Get trading settings
+export async function getTradingSettings(userId: string) {
+  try {
+    const settingsRef = ref(database, `trading_settings/${userId}`);
+    const snapshot = await get(settingsRef);
+    
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+    
+    // Return default settings if none exist
+    return {
+      auto_trading_enabled: false,
+      auto_trading_spot_enabled: false,
+      auto_trading_futures_enabled: false,
+      default_leverage: 10,
+      default_amount: 10,
+      default_tp_percent: 5,
+      default_sl_percent: 2,
+      monitored_symbols: ['BTCUSDT', 'ETHUSDT'],
+      interval: '15m',
+    };
+  } catch (error) {
+    console.error('Error fetching trading settings:', error);
+    throw error;
+  }
+}
+
+// Update trading settings
+export async function updateTradingSettings(userId: string, settings: any) {
+  try {
+    const settingsRef = ref(database, `trading_settings/${userId}`);
+    await update(settingsRef, {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    });
+    console.log('✅ Trading settings updated:', userId);
+  } catch (error) {
+    console.error('❌ Error updating trading settings:', error);
+    throw error;
+  }
 }
 
 // Get all users (admin only)

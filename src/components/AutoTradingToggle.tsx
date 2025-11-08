@@ -6,19 +6,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Loader2, Plus, X, TrendingUp, Clock, DollarSign } from 'lucide-react';
+import { Loader2, Plus, X, TrendingUp, Clock, DollarSign, ShoppingCart, LineChart } from 'lucide-react';
 import api from '@/lib/api';
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface AutoTradingSettings {
-  enabled: boolean;
-  watchlist: string[];
+  // Spot settings
+  spot_enabled: boolean;
+  spot_watchlist: string[];
+  spot_default_amount: number;
+  spot_default_tp: number;
+  spot_default_sl: number;
+  
+  // Futures settings
+  futures_enabled: boolean;
+  futures_watchlist: string[];
+  futures_default_amount: number;
+  futures_default_leverage: number;
+  futures_default_tp: number;
+  futures_default_sl: number;
+  
+  // Common settings
   interval: string;
-  default_amount: number;
-  default_leverage: number;
-  default_tp: number;
-  default_sl: number;
   exchange: string;
 }
 
@@ -37,19 +49,32 @@ interface Signal {
 
 export const AutoTradingToggle = () => {
   const { t } = useTranslation();
-  const [enabled, setEnabled] = useState(false);
+  const { tier, canAccessFeature } = useSubscription();
+  
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<AutoTradingSettings>({
-    enabled: false,
-    watchlist: ['BTCUSDT', 'ETHUSDT'],
+    // Spot defaults
+    spot_enabled: false,
+    spot_watchlist: ['BTCUSDT', 'ETHUSDT'],
+    spot_default_amount: 10,
+    spot_default_tp: 5,
+    spot_default_sl: 2,
+    
+    // Futures defaults
+    futures_enabled: false,
+    futures_watchlist: ['BTCUSDT', 'ETHUSDT'],
+    futures_default_amount: 10,
+    futures_default_leverage: 10,
+    futures_default_tp: 5,
+    futures_default_sl: 2,
+    
+    // Common
     interval: '15m',
-    default_amount: 10,
-    default_leverage: 10,
-    default_tp: 5,
-    default_sl: 2,
     exchange: 'binance',
   });
-  const [newSymbol, setNewSymbol] = useState('');
+  
+  const [newSymbolSpot, setNewSymbolSpot] = useState('');
+  const [newSymbolFutures, setNewSymbolFutures] = useState('');
   const [signals, setSignals] = useState<Signal[]>([]);
 
   useEffect(() => {
@@ -60,10 +85,10 @@ export const AutoTradingToggle = () => {
   const fetchSettings = async () => {
     try {
       const response = await api.get('/api/auto-trading/settings');
+      console.log('✅ Fetched settings:', response.data);
       setSettings(response.data);
-      setEnabled(response.data.enabled);
     } catch (error) {
-      console.error('Failed to fetch auto-trading settings:', error);
+      console.error('❌ Failed to fetch auto-trading settings:', error);
     }
   };
 
@@ -76,21 +101,61 @@ export const AutoTradingToggle = () => {
     }
   };
 
-  const handleToggle = async (checked: boolean) => {
+  const handleSpotToggle = async (checked: boolean) => {
+    // Check feature access
+    if (checked && !canAccessFeature('autoTrading')) {
+      toast.error(
+        `Spot auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post('/api/auto-trading/settings', {
         ...settings,
-        enabled: checked,
+        spot_enabled: checked,
       });
-      setEnabled(checked);
+      setSettings({ ...settings, spot_enabled: checked });
       toast.success(
         checked 
-          ? 'Otomatik trading aktif edildi!' 
-          : 'Otomatik trading durduruldu'
+          ? '✅ Spot otomatik trading aktif!' 
+          : '🛑 Spot otomatik trading durduruldu'
       );
+      fetchSignals();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Ayarlar güncellenemedi');
+      console.error('❌ Spot toggle error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFuturesToggle = async (checked: boolean) => {
+    // Check feature access
+    if (checked && !canAccessFeature('autoTrading')) {
+      toast.error(
+        `Futures auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.post('/api/auto-trading/settings', {
+        ...settings,
+        futures_enabled: checked,
+      });
+      setSettings({ ...settings, futures_enabled: checked });
+      toast.success(
+        checked 
+          ? '✅ Futures otomatik trading aktif!' 
+          : '🛑 Futures otomatik trading durduruldu'
+      );
+      fetchSignals();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Ayarlar güncellenemedi');
+      console.error('❌ Futures toggle error:', error);
     } finally {
       setLoading(false);
     }
@@ -99,11 +164,8 @@ export const AutoTradingToggle = () => {
   const handleSaveSettings = async () => {
     setLoading(true);
     try {
-      await api.post('/api/auto-trading/settings', {
-        ...settings,
-        enabled,
-      });
-      toast.success('Ayarlar kaydedildi!');
+      await api.post('/api/auto-trading/settings', settings);
+      toast.success('✅ Ayarlar kaydedildi!');
       fetchSignals();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Ayarlar kaydedilemedi');
@@ -112,24 +174,39 @@ export const AutoTradingToggle = () => {
     }
   };
 
-  const addToWatchlist = () => {
-    if (!newSymbol) return;
-    const symbol = newSymbol.toUpperCase().trim();
-    if (settings.watchlist.includes(symbol)) {
+  const addToWatchlist = (type: 'spot' | 'futures') => {
+    const symbol = type === 'spot' ? newSymbolSpot : newSymbolFutures;
+    if (!symbol) return;
+    
+    const formattedSymbol = symbol.toUpperCase().trim();
+    const watchlistKey = type === 'spot' ? 'spot_watchlist' : 'futures_watchlist';
+    
+    if (settings[watchlistKey].includes(formattedSymbol)) {
       toast.error('Bu coin zaten listede!');
       return;
     }
-    setSettings({ ...settings, watchlist: [...settings.watchlist, symbol] });
-    setNewSymbol('');
-    toast.success(`${symbol} watchlist'e eklendi`);
-  };
-
-  const removeFromWatchlist = (symbol: string) => {
+    
     setSettings({
       ...settings,
-      watchlist: settings.watchlist.filter((s) => s !== symbol),
+      [watchlistKey]: [...settings[watchlistKey], formattedSymbol]
     });
-    toast.success(`${symbol} watchlist'ten çıkarıldı`);
+    
+    if (type === 'spot') {
+      setNewSymbolSpot('');
+    } else {
+      setNewSymbolFutures('');
+    }
+    
+    toast.success(`${formattedSymbol} ${type} watchlist'e eklendi`);
+  };
+
+  const removeFromWatchlist = (type: 'spot' | 'futures', symbol: string) => {
+    const watchlistKey = type === 'spot' ? 'spot_watchlist' : 'futures_watchlist';
+    setSettings({
+      ...settings,
+      [watchlistKey]: settings[watchlistKey].filter((s) => s !== symbol)
+    });
+    toast.success(`${symbol} ${type} watchlist'ten çıkarıldı`);
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -138,167 +215,297 @@ export const AutoTradingToggle = () => {
 
   return (
     <div className="space-y-6">
-      {/* Main Toggle Card */}
-      <Card className="border-primary/20">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl">Otomatik Trading</CardTitle>
-              <CardDescription>
-                EMA 9/21 crossover stratejisi ile otomatik al-sat
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-3">
-              <Label htmlFor="auto-trading" className="text-base">
-                {enabled ? (
+      {/* Status Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Spot Trading Card */}
+        <Card className={settings.spot_enabled ? "border-green-500/50" : "border-primary/20"}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                <CardTitle className="text-lg">Spot Trading</CardTitle>
+              </div>
+              <div className="flex items-center gap-3">
+                {settings.spot_enabled ? (
                   <Badge variant="default" className="bg-green-500">Aktif</Badge>
                 ) : (
                   <Badge variant="secondary">Kapalı</Badge>
                 )}
-              </Label>
-              <Switch
-                id="auto-trading"
-                checked={enabled}
-                onCheckedChange={handleToggle}
-                disabled={loading}
-              />
+                <Switch
+                  checked={settings.spot_enabled}
+                  onCheckedChange={handleSpotToggle}
+                  disabled={loading}
+                />
+              </div>
             </div>
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>İzlenen: {settings.spot_watchlist.length} coin</p>
+              <p>Miktar: {settings.spot_default_amount} USDT</p>
+              <p>TP/SL: {settings.spot_default_tp}% / {settings.spot_default_sl}%</p>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Settings Card */}
+        {/* Futures Trading Card */}
+        <Card className={settings.futures_enabled ? "border-green-500/50" : "border-primary/20"}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LineChart className="h-5 w-5" />
+                <CardTitle className="text-lg">Futures Trading</CardTitle>
+              </div>
+              <div className="flex items-center gap-3">
+                {settings.futures_enabled ? (
+                  <Badge variant="default" className="bg-green-500">Aktif</Badge>
+                ) : (
+                  <Badge variant="secondary">Kapalı</Badge>
+                )}
+                <Switch
+                  checked={settings.futures_enabled}
+                  onCheckedChange={handleFuturesToggle}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>İzlenen: {settings.futures_watchlist.length} coin</p>
+              <p>Miktar: {settings.futures_default_amount} USDT × {settings.futures_default_leverage}x</p>
+              <p>TP/SL: {settings.futures_default_tp}% / {settings.futures_default_sl}%</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Settings Tabs */}
       <Card>
         <CardHeader>
           <CardTitle>Ayarlar</CardTitle>
+          <CardDescription>
+            Spot ve Futures trading ayarlarını ayrı ayrı yapılandırın
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Watchlist */}
-          <div className="space-y-3">
-            <Label>Watchlist (İzlenecek Coinler)</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="BTCUSDT"
-                value={newSymbol}
-                onChange={(e) => setNewSymbol(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addToWatchlist()}
-              />
-              <Button onClick={addToWatchlist} size="icon">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {settings.watchlist.map((symbol) => (
-                <Badge key={symbol} variant="secondary" className="gap-1">
-                  {symbol}
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => removeFromWatchlist(symbol)}
+        <CardContent>
+          <Tabs defaultValue="spot" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="spot">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Spot Trading
+              </TabsTrigger>
+              <TabsTrigger value="futures">
+                <LineChart className="h-4 w-4 mr-2" />
+                Futures Trading
+              </TabsTrigger>
+            </TabsList>
+
+            {/* SPOT SETTINGS */}
+            <TabsContent value="spot" className="space-y-6">
+              {/* Watchlist */}
+              <div className="space-y-3">
+                <Label>Watchlist (İzlenecek Coinler)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="BTCUSDT"
+                    value={newSymbolSpot}
+                    onChange={(e) => setNewSymbolSpot(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addToWatchlist('spot')}
                   />
-                </Badge>
-              ))}
+                  <Button onClick={() => addToWatchlist('spot')} size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {settings.spot_watchlist.map((symbol) => (
+                    <Badge key={symbol} variant="secondary" className="gap-1">
+                      {symbol}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeFromWatchlist('spot', symbol)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Spot Amount */}
+                <div className="space-y-2">
+                  <Label>İşlem Miktarı (USDT)</Label>
+                  <Input
+                    type="number"
+                    value={settings.spot_default_amount}
+                    onChange={(e) =>
+                      setSettings({ ...settings, spot_default_amount: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+
+                {/* Spot Take Profit % */}
+                <div className="space-y-2">
+                  <Label>Take Profit %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={settings.spot_default_tp}
+                    onChange={(e) =>
+                      setSettings({ ...settings, spot_default_tp: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+
+                {/* Spot Stop Loss % */}
+                <div className="space-y-2">
+                  <Label>Stop Loss %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={settings.spot_default_sl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, spot_default_sl: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* FUTURES SETTINGS */}
+            <TabsContent value="futures" className="space-y-6">
+              {/* Watchlist */}
+              <div className="space-y-3">
+                <Label>Watchlist (İzlenecek Coinler)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="BTCUSDT"
+                    value={newSymbolFutures}
+                    onChange={(e) => setNewSymbolFutures(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addToWatchlist('futures')}
+                  />
+                  <Button onClick={() => addToWatchlist('futures')} size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {settings.futures_watchlist.map((symbol) => (
+                    <Badge key={symbol} variant="secondary" className="gap-1">
+                      {symbol}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => removeFromWatchlist('futures', symbol)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Futures Amount */}
+                <div className="space-y-2">
+                  <Label>İşlem Miktarı (USDT)</Label>
+                  <Input
+                    type="number"
+                    value={settings.futures_default_amount}
+                    onChange={(e) =>
+                      setSettings({ ...settings, futures_default_amount: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+
+                {/* Leverage */}
+                <div className="space-y-2">
+                  <Label>Kaldıraç (Leverage)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="125"
+                    value={settings.futures_default_leverage}
+                    onChange={(e) =>
+                      setSettings({ ...settings, futures_default_leverage: parseInt(e.target.value) })
+                    }
+                  />
+                </div>
+
+                {/* Futures Take Profit % */}
+                <div className="space-y-2">
+                  <Label>Take Profit %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={settings.futures_default_tp}
+                    onChange={(e) =>
+                      setSettings({ ...settings, futures_default_tp: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+
+                {/* Futures Stop Loss % */}
+                <div className="space-y-2">
+                  <Label>Stop Loss %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={settings.futures_default_sl}
+                    onChange={(e) =>
+                      setSettings({ ...settings, futures_default_sl: parseFloat(e.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {/* Common Settings */}
+          <div className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Exchange */}
+              <div className="space-y-2">
+                <Label>Borsa</Label>
+                <Select
+                  value={settings.exchange}
+                  onValueChange={(value) => setSettings({ ...settings, exchange: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="binance">Binance</SelectItem>
+                    <SelectItem value="bybit">Bybit</SelectItem>
+                    <SelectItem value="okx">OKX</SelectItem>
+                    <SelectItem value="kucoin">KuCoin</SelectItem>
+                    <SelectItem value="mexc">MEXC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Interval */}
+              <div className="space-y-2">
+                <Label>Zaman Aralığı</Label>
+                <Select
+                  value={settings.interval}
+                  onValueChange={(value) => setSettings({ ...settings, interval: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5m">5 Dakika</SelectItem>
+                    <SelectItem value="15m">15 Dakika</SelectItem>
+                    <SelectItem value="30m">30 Dakika</SelectItem>
+                    <SelectItem value="1h">1 Saat</SelectItem>
+                    <SelectItem value="4h">4 Saat</SelectItem>
+                    <SelectItem value="1d">1 Gün</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            <Button onClick={handleSaveSettings} disabled={loading} className="w-full">
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Tüm Ayarları Kaydet
+            </Button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Exchange */}
-            <div className="space-y-2">
-              <Label>Borsa</Label>
-              <Select
-                value={settings.exchange}
-                onValueChange={(value) => setSettings({ ...settings, exchange: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="binance">Binance</SelectItem>
-                  <SelectItem value="bybit">Bybit</SelectItem>
-                  <SelectItem value="okx">OKX</SelectItem>
-                  <SelectItem value="kucoin">KuCoin</SelectItem>
-                  <SelectItem value="mexc">MEXC</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Interval */}
-            <div className="space-y-2">
-              <Label>Zaman Aralığı</Label>
-              <Select
-                value={settings.interval}
-                onValueChange={(value) => setSettings({ ...settings, interval: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5m">5 Dakika</SelectItem>
-                  <SelectItem value="15m">15 Dakika</SelectItem>
-                  <SelectItem value="30m">30 Dakika</SelectItem>
-                  <SelectItem value="1h">1 Saat</SelectItem>
-                  <SelectItem value="4h">4 Saat</SelectItem>
-                  <SelectItem value="1d">1 Gün</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Default Amount */}
-            <div className="space-y-2">
-              <Label>İşlem Miktarı (USDT)</Label>
-              <Input
-                type="number"
-                value={settings.default_amount}
-                onChange={(e) =>
-                  setSettings({ ...settings, default_amount: parseFloat(e.target.value) })
-                }
-              />
-            </div>
-
-            {/* Default Leverage */}
-            <div className="space-y-2">
-              <Label>Kaldıraç (Leverage)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="125"
-                value={settings.default_leverage}
-                onChange={(e) =>
-                  setSettings({ ...settings, default_leverage: parseInt(e.target.value) })
-                }
-              />
-            </div>
-
-            {/* Take Profit % */}
-            <div className="space-y-2">
-              <Label>Take Profit %</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={settings.default_tp}
-                onChange={(e) =>
-                  setSettings({ ...settings, default_tp: parseFloat(e.target.value) })
-                }
-              />
-            </div>
-
-            {/* Stop Loss % */}
-            <div className="space-y-2">
-              <Label>Stop Loss %</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={settings.default_sl}
-                onChange={(e) =>
-                  setSettings({ ...settings, default_sl: parseFloat(e.target.value) })
-                }
-              />
-            </div>
-          </div>
-
-          <Button onClick={handleSaveSettings} disabled={loading} className="w-full">
-            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Ayarları Kaydet
-          </Button>
         </CardContent>
       </Card>
 

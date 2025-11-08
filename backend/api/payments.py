@@ -9,13 +9,16 @@ import hmac
 import hashlib
 import os
 import logging
+from datetime import datetime
 
 from backend.auth import get_current_user
+from firebase_admin import db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
 LEMONSQUEEZY_WEBHOOK_SECRET = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
+FIREBASE_DATABASE_URL = os.getenv("FIREBASE_DATABASE_URL")
 
 class CheckoutSession(BaseModel):
     variant_id: str
@@ -29,20 +32,28 @@ class SubscriptionInfo(BaseModel):
 
 @router.get("/subscription")
 async def get_subscription(current_user = Depends(get_current_user)):
-    """Get user's current subscription"""
+    """Get user's current subscription from Firebase"""
     try:
         user_id = current_user.get("user_id")
         
-        # TODO: Fetch from database
-        # For now, check Firebase or return default
-        from backend.auth import get_user_plan
-        plan = await get_user_plan(user_id)
+        # Fetch from Firebase: user_subscriptions/{user_id}
+        ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
+        subscription = ref.get()
+        
+        if subscription and isinstance(subscription, dict):
+            return {
+                "plan": subscription.get("tier", "free"),
+                "status": subscription.get("status", "active"),
+                "valid_until": subscription.get("endDate"),
+                "startDate": subscription.get("startDate")
+            }
         
         return {
-            "plan": plan,
+            "plan": "free",
             "status": "active",
             "valid_until": None
         }
+        
     except Exception as e:
         logger.error(f"Failed to get subscription: {str(e)}")
         return {
@@ -103,6 +114,44 @@ async def lemonsqueezy_webhook(request: Request):
         logger.error(f"Webhook error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+async def update_user_subscription(user_id: str, tier: str, status: str):
+    """Update user subscription in Firebase"""
+    try:
+        ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
+        
+        subscription_data = {
+            "tier": tier,
+            "status": status,
+            "startDate": datetime.utcnow().isoformat(),
+            "updatedAt": datetime.utcnow().isoformat()
+        }
+        
+        ref.set(subscription_data)
+        logger.info(f"✅ Updated subscription for {user_id}: {tier} ({status})")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to update subscription: {str(e)}")
+        raise
+
+async def get_user_id_by_email(email: str) -> Optional[str]:
+    """Get user ID from Firebase by email"""
+    try:
+        # Search in users collection
+        users_ref = db.reference('users', url=FIREBASE_DATABASE_URL)
+        users = users_ref.get()
+        
+        if users:
+            for user_id, user_data in users.items():
+                if user_data.get('email') == email:
+                    return user_id
+        
+        logger.warning(f"⚠️ User not found with email: {email}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error finding user by email: {str(e)}")
+        return None
+
 async def handle_order_created(payload: dict):
     """Handle new order/subscription"""
     try:
@@ -117,10 +166,13 @@ async def handle_order_created(payload: dict):
         
         logger.info(f"✅ New subscription: {user_email} -> {plan}")
         
-        # TODO: Update user plan in database
-        # await db.update_user_plan(user_email, plan)
+        # Get user ID from email
+        user_id = await get_user_id_by_email(user_email)
         
-        # TODO: Send welcome email
+        if user_id:
+            await update_user_subscription(user_id, plan, "active")
+        else:
+            logger.error(f"❌ Could not find user ID for email: {user_email}")
         
     except Exception as e:
         logger.error(f"Error handling order_created: {str(e)}")
@@ -139,7 +191,9 @@ async def handle_subscription_created(payload: dict):
         
         logger.info(f"🔄 Subscription created: {user_email} -> {plan} ({status})")
         
-        # TODO: Update database
+        user_id = await get_user_id_by_email(user_email)
+        if user_id:
+            await update_user_subscription(user_id, plan, status)
         
     except Exception as e:
         logger.error(f"Error handling subscription_created: {str(e)}")
@@ -158,7 +212,9 @@ async def handle_subscription_updated(payload: dict):
         
         logger.info(f"📝 Subscription updated: {user_email} -> {plan} ({status})")
         
-        # TODO: Update database
+        user_id = await get_user_id_by_email(user_email)
+        if user_id:
+            await update_user_subscription(user_id, plan, status)
         
     except Exception as e:
         logger.error(f"Error handling subscription_updated: {str(e)}")
@@ -173,7 +229,13 @@ async def handle_subscription_cancelled(payload: dict):
         
         logger.info(f"❌ Subscription cancelled: {user_email}")
         
-        # TODO: Downgrade to free plan (but keep until expiration)
+        user_id = await get_user_id_by_email(user_email)
+        if user_id:
+            # Keep current plan but mark as cancelled
+            ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
+            current = ref.get()
+            if current:
+                ref.update({"status": "cancelled"})
         
     except Exception as e:
         logger.error(f"Error handling subscription_cancelled: {str(e)}")
@@ -188,8 +250,10 @@ async def handle_subscription_expired(payload: dict):
         
         logger.info(f"⏰ Subscription expired: {user_email}")
         
-        # TODO: Downgrade to free plan immediately
-        # await db.update_user_plan_by_email(user_email, "free")
+        user_id = await get_user_id_by_email(user_email)
+        if user_id:
+            # Downgrade to free immediately
+            await update_user_subscription(user_id, "free", "expired")
         
     except Exception as e:
         logger.error(f"Error handling subscription_expired: {str(e)}")
