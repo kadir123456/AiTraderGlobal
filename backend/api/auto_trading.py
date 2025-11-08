@@ -1,6 +1,6 @@
 """
 Auto Trading API Endpoints
-✅ FIXED VERSION - With Spot/Futures Separation
+✅ FIXED VERSION - With Spot/Futures Separation & Better Error Handling
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -56,10 +56,17 @@ async def update_auto_trading_settings(
         user_id = current_user.get('user_id') or current_user.get('id')
         firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
 
+        logger.info(f"📝 Updating auto-trading settings for user {user_id}")
+        logger.info(f"   Spot enabled: {settings.spot_enabled}")
+        logger.info(f"   Futures enabled: {settings.futures_enabled}")
+        logger.info(f"   Exchange: {settings.exchange}")
+
         # ✅ Check feature access for spot trading
         if settings.spot_enabled:
+            logger.info(f"🔐 Checking spot trading access for user {user_id}")
             can_access_spot = await check_feature_access(user_id, 'auto_trading_spot')
             if not can_access_spot:
+                logger.warning(f"❌ User {user_id} cannot access spot auto-trading")
                 raise HTTPException(
                     status_code=403,
                     detail=(
@@ -70,8 +77,10 @@ async def update_auto_trading_settings(
         
         # ✅ Check feature access for futures trading
         if settings.futures_enabled:
+            logger.info(f"🔐 Checking futures trading access for user {user_id}")
             can_access_futures = await check_feature_access(user_id, 'auto_trading_futures')
             if not can_access_futures:
+                logger.warning(f"❌ User {user_id} cannot access futures auto-trading")
                 raise HTTPException(
                     status_code=403,
                     detail=(
@@ -82,14 +91,32 @@ async def update_auto_trading_settings(
         
         # ✅ Validate exchange API keys exist
         if settings.spot_enabled or settings.futures_enabled:
-            api_keys_ref = db.reference(f'api_keys/{user_id}/{settings.exchange}', url=firebase_db_url)
-            api_keys = api_keys_ref.get()
+            logger.info(f"🔑 Checking API keys for exchange: {settings.exchange}")
             
-            if not api_keys:
+            # Get all user API keys
+            api_keys_ref = db.reference(f'api_keys/{user_id}', url=firebase_db_url)
+            all_keys = api_keys_ref.get()
+            
+            logger.info(f"📦 API keys data: {all_keys}")
+            
+            # Check if this exchange has API keys
+            if not all_keys or settings.exchange not in all_keys:
+                logger.error(f"❌ No API keys found for {settings.exchange}")
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Please add {settings.exchange} API keys before enabling auto-trading"
+                    detail=f"Please add {settings.exchange.upper()} API keys before enabling auto-trading. Go to Settings > Exchange Integration to add your keys."
                 )
+            
+            # Check if keys are not empty
+            exchange_keys = all_keys.get(settings.exchange, {})
+            if not exchange_keys.get('api_key') or not exchange_keys.get('api_secret'):
+                logger.error(f"❌ Incomplete API keys for {settings.exchange}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{settings.exchange.upper()} API keys are incomplete. Please update your keys in Settings."
+                )
+            
+            logger.info(f"✅ API keys validated for {settings.exchange}")
         
         # ✅ Save settings to Firebase
         settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
@@ -140,7 +167,7 @@ async def update_auto_trading_settings(
         logger.error(f"❌ Error updating auto-trading settings: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Internal server error: {str(e)}"
         )
 
 
@@ -156,12 +183,15 @@ async def get_auto_trading_settings(
         user_id = current_user.get('user_id') or current_user.get('id')
         firebase_db_url = os.getenv("FIREBASE_DATABASE_URL")
         
+        logger.info(f"📖 Fetching auto-trading settings for user {user_id}")
+        
         # Get settings from Firebase
         settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
         settings = settings_ref.get()
         
         # If no settings exist, return defaults
         if not settings:
+            logger.info(f"⚠️ No settings found, returning defaults")
             return {
                 # Spot defaults
                 "spot_enabled": False,
@@ -183,6 +213,7 @@ async def get_auto_trading_settings(
                 "exchange": "binance"
             }
         
+        logger.info(f"✅ Settings retrieved: {settings}")
         return settings
         
     except Exception as e:

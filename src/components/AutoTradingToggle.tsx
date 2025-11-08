@@ -105,27 +105,40 @@ export const AutoTradingToggle = () => {
     // Check feature access
     if (checked && !canAccessFeature('autoTrading')) {
       toast.error(
-        `Spot auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`
+        `Spot auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`,
+        { duration: 5000 }
       );
       return;
     }
 
     setLoading(true);
     try {
-      await api.post('/api/auto-trading/settings', {
+      const response = await api.post('/api/auto-trading/settings', {
         ...settings,
         spot_enabled: checked,
       });
+      
       setSettings({ ...settings, spot_enabled: checked });
+      
       toast.success(
         checked 
           ? '✅ Spot otomatik trading aktif!' 
-          : '🛑 Spot otomatik trading durduruldu'
+          : '🛑 Spot otomatik trading durduruldu',
+        { duration: 3000 }
       );
+      
       fetchSignals();
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Ayarlar güncellenemedi');
       console.error('❌ Spot toggle error:', error);
+      
+      const errorDetail = error.response?.data?.detail || error.message || 'Ayarlar güncellenemedi';
+      
+      toast.error(errorDetail, {
+        duration: 5000,
+        description: error.response?.status === 400 
+          ? 'Lütfen exchange API anahtarlarınızı kontrol edin'
+          : undefined
+      });
     } finally {
       setLoading(false);
     }
@@ -135,27 +148,40 @@ export const AutoTradingToggle = () => {
     // Check feature access
     if (checked && !canAccessFeature('autoTrading')) {
       toast.error(
-        `Futures auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`
+        `Futures auto-trading requires PRO or ENTERPRISE plan. Your plan: ${tier.toUpperCase()}`,
+        { duration: 5000 }
       );
       return;
     }
 
     setLoading(true);
     try {
-      await api.post('/api/auto-trading/settings', {
+      const response = await api.post('/api/auto-trading/settings', {
         ...settings,
         futures_enabled: checked,
       });
+      
       setSettings({ ...settings, futures_enabled: checked });
+      
       toast.success(
         checked 
           ? '✅ Futures otomatik trading aktif!' 
-          : '🛑 Futures otomatik trading durduruldu'
+          : '🛑 Futures otomatik trading durduruldu',
+        { duration: 3000 }
       );
+      
       fetchSignals();
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Ayarlar güncellenemedi');
       console.error('❌ Futures toggle error:', error);
+      
+      const errorDetail = error.response?.data?.detail || error.message || 'Ayarlar güncellenemedi';
+      
+      toast.error(errorDetail, {
+        duration: 5000,
+        description: error.response?.status === 400 
+          ? 'Lütfen exchange API anahtarlarınızı kontrol edin'
+          : undefined
+      });
     } finally {
       setLoading(false);
     }
