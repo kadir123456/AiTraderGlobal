@@ -1,6 +1,6 @@
 """
 Auto Trading API Endpoints
-✅ FIXED VERSION - Uses get_user_api_keys() like balance.py
+✅ FIXED VERSION - Proper API key path resolution
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from datetime import datetime
 import logging
 
 from backend.auth import get_current_user, check_feature_access
-from backend.firebase_admin import get_user_api_keys  # ✅ IMPORT ADDED
+from backend.firebase_admin import get_user_api_keys  # ✅ Correct import
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auto-trading", tags=["auto-trading"])
@@ -90,14 +90,15 @@ async def update_auto_trading_settings(
                     )
                 )
         
-        # ✅ Validate exchange API keys exist (FIXED: Using get_user_api_keys)
+        # ✅ Validate exchange API keys exist
         if settings.spot_enabled or settings.futures_enabled:
             logger.info(f"🔑 Checking API keys for exchange: {settings.exchange}")
             
             # ✅ Use the same function as balance.py and integrations.py
+            # This reads from: users/{user_id}/api_keys/{exchange}
             api_keys = get_user_api_keys(user_id, settings.exchange)
             
-            logger.info(f"📦 API keys retrieved: {bool(api_keys)}")
+            logger.info(f"📦 API keys found: {api_keys is not None}")
             
             if not api_keys:
                 logger.error(f"❌ No API keys found for {settings.exchange}")
@@ -115,6 +116,7 @@ async def update_auto_trading_settings(
                 )
             
             logger.info(f"✅ API keys validated for {settings.exchange}")
+            logger.info(f"   API Key (first 10 chars): {api_keys.get('api_key', '')[:10]}...")
         
         # ✅ Save settings to Firebase
         settings_ref = db.reference(f'trading_settings/{user_id}', url=firebase_db_url)
