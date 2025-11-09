@@ -1,4 +1,4 @@
-# Last updated: 2025-11-07 - Added proper logging configuration
+# Last updated: 2025-11-09 - Added Auto-Trading Manager
 from fastapi import FastAPI, HTTPException, Depends, Header, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -53,6 +53,15 @@ except ImportError as e:
     AUTO_TRADING_AVAILABLE = False
     logger.warning(f"⚠️ Warning: Auto-trading module not available - {str(e)}")
 
+# ✅ NEW: Import Auto-Trading Manager
+try:
+    from backend.services.auto_trading_manager import auto_trading_manager
+    AUTO_TRADING_MANAGER_AVAILABLE = True
+    logger.info("✅ Auto-Trading Manager loaded successfully")
+except ImportError as e:
+    AUTO_TRADING_MANAGER_AVAILABLE = False
+    logger.warning(f"⚠️ Warning: Auto-Trading Manager not available - {str(e)}")
+
 # Import exchange services
 try:
     from backend.services import binance_service, bybit_service, okx_service, kucoin_service, mexc_service
@@ -90,6 +99,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ✅ NEW: Startup Event - Start Auto-Trading Manager
+@app.on_event("startup")
+async def startup_event():
+    """Application startup - Initialize auto-trading manager"""
+    logger.info("🚀 Starting application services...")
+    
+    if AUTO_TRADING_MANAGER_AVAILABLE:
+        try:
+            await auto_trading_manager.start()
+            logger.info("✅ Auto-Trading Manager started successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to start Auto-Trading Manager: {e}")
+    else:
+        logger.warning("⚠️ Auto-Trading Manager not available, skipping startup")
+    
+    logger.info("✅ Application startup complete")
+
+# ✅ NEW: Shutdown Event - Stop Auto-Trading Manager
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown - Clean up auto-trading manager"""
+    logger.info("🛑 Shutting down application services...")
+    
+    if AUTO_TRADING_MANAGER_AVAILABLE:
+        try:
+            await auto_trading_manager.stop()
+            logger.info("✅ Auto-Trading Manager stopped successfully")
+        except Exception as e:
+            logger.error(f"❌ Error stopping Auto-Trading Manager: {e}")
+    
+    logger.info("✅ Application shutdown complete")
 
 # Environment variables
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
@@ -349,12 +390,17 @@ async def root():
     return {
         "message": "EMA Navigator AI Trading API",
         "version": "1.0.0",
-        "status": "active"
+        "status": "active",
+        "auto_trading": AUTO_TRADING_MANAGER_AVAILABLE
     }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "auto_trading_manager": AUTO_TRADING_MANAGER_AVAILABLE
+    }
 
 @app.get("/api/bot/coins")
 async def get_trading_coins(exchange: str = "binance"):
