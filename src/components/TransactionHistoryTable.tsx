@@ -215,11 +215,11 @@ export const TransactionHistoryTable = () => {
                         )}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatPrice(tx.entry_price)}</TableCell>
+                    <TableCell>{formatPrice(tx.entry_price ?? 0)}</TableCell>
                     <TableCell>
                       {tx.exit_price ? formatPrice(tx.exit_price) : '-'}
                     </TableCell>
-                    <TableCell>{formatPrice(tx.amount)}</TableCell>
+                    <TableCell>{formatPrice(tx.amount ?? 0)}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">
                         {tx.leverage}x

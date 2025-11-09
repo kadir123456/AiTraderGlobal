@@ -6,14 +6,13 @@ interface CurrencyContextType {
   currency: Currency;
   setCurrency: (currency: Currency) => void;
   convertPrice: (usdPrice: number) => number;
-  formatPrice: (usdPrice: number) => string;
+  formatPrice: (usdPrice: number | undefined | null) => string;
   exchangeRate: number;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
-// Current exchange rate - in production, fetch from API
-const USD_TO_TRY_RATE = 42.1132; // 25 USD = 1052.83 TRY, 299 USD = 12590.89 TRY
+const USD_TO_TRY_RATE = 42.1132;
 
 export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
   const [currency, setCurrency] = useState<Currency>('USD');
@@ -22,7 +21,10 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
     return currency === 'TRY' ? usdPrice * USD_TO_TRY_RATE : usdPrice;
   };
 
-  const formatPrice = (usdPrice: number): string => {
+  const formatPrice = (usdPrice: number | undefined | null): string => {
+    if (usdPrice === undefined || usdPrice === null || isNaN(usdPrice)) {
+      return currency === 'TRY' ? '₺0.00' : '$0.00';
+    }
     const converted = convertPrice(usdPrice);
     const symbol = currency === 'TRY' ? '₺' : '$';
     return `${symbol}${converted.toFixed(2)}`;
