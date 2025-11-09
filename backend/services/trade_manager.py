@@ -4,6 +4,13 @@ Trade Manager - Spot Trading Additions
 Add these functions to backend/services/trade_manager.py
 """
 
+from typing import Optional, Dict
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 async def create_spot_order(
     self,
     user_id: str,
