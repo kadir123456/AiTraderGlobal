@@ -1,6 +1,6 @@
 """
 Auto Trading API Endpoints
-✅ FIXED VERSION - With Spot/Futures Separation & Better Error Handling
+✅ FIXED VERSION - Uses get_user_api_keys() like balance.py
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 
 from backend.auth import get_current_user, check_feature_access
+from backend.firebase_admin import get_user_api_keys  # ✅ IMPORT ADDED
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auto-trading", tags=["auto-trading"])
@@ -89,18 +90,16 @@ async def update_auto_trading_settings(
                     )
                 )
         
-        # ✅ Validate exchange API keys exist
+        # ✅ Validate exchange API keys exist (FIXED: Using get_user_api_keys)
         if settings.spot_enabled or settings.futures_enabled:
             logger.info(f"🔑 Checking API keys for exchange: {settings.exchange}")
             
-            # Get all user API keys
-            api_keys_ref = db.reference(f'api_keys/{user_id}', url=firebase_db_url)
-            all_keys = api_keys_ref.get()
+            # ✅ Use the same function as balance.py and integrations.py
+            api_keys = get_user_api_keys(user_id, settings.exchange)
             
-            logger.info(f"📦 API keys data: {all_keys}")
+            logger.info(f"📦 API keys retrieved: {bool(api_keys)}")
             
-            # Check if this exchange has API keys
-            if not all_keys or settings.exchange not in all_keys:
+            if not api_keys:
                 logger.error(f"❌ No API keys found for {settings.exchange}")
                 raise HTTPException(
                     status_code=400,
@@ -108,8 +107,7 @@ async def update_auto_trading_settings(
                 )
             
             # Check if keys are not empty
-            exchange_keys = all_keys.get(settings.exchange, {})
-            if not exchange_keys.get('api_key') or not exchange_keys.get('api_secret'):
+            if not api_keys.get('api_key') or not api_keys.get('api_secret'):
                 logger.error(f"❌ Incomplete API keys for {settings.exchange}")
                 raise HTTPException(
                     status_code=400,
