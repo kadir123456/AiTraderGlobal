@@ -87,20 +87,54 @@ class TradeManager:
                 f"   Entry Price: ~${entry_price:.2f}"
             )
             
-            # Calculate quantity
-            quantity = amount / entry_price
+            # Place order via exchange-specific service
+            exchange_lower = exchange.lower()
             
-            # Place order via unified exchange
-            order_result = await unified_exchange.place_order(
-                exchange=exchange,
-                api_key=api_key,
-                api_secret=api_secret,
-                symbol=symbol,
-                side=side,
-                quantity=quantity,
-                is_futures=is_futures,
-                leverage=leverage,
-                passphrase=passphrase
+            if exchange_lower == 'binance':
+                from backend.services.binance_service import create_order as binance_order
+                order_result = await binance_order(
+                    api_key, api_secret, symbol, side, amount,
+                    leverage, is_futures, tp_percentage, sl_percentage
+                )
+                
+            elif exchange_lower == 'bybit':
+                from backend.services.bybit_service import create_order as bybit_order
+                order_result = await bybit_order(
+                    api_key, api_secret, symbol, side, amount,
+                    leverage, is_futures, tp_percentage, sl_percentage
+                )
+                
+            elif exchange_lower == 'okx':
+                from backend.services.okx_service import create_order as okx_order
+                order_result = await okx_order(
+                    api_key, api_secret, symbol, side, amount,
+                    leverage, is_futures, tp_percentage, sl_percentage, passphrase
+                )
+                
+            elif exchange_lower == 'kucoin':
+                from backend.services.kucoin_service import create_order as kucoin_order
+                order_result = await kucoin_order(
+                    api_key, api_secret, symbol, side, amount,
+                    leverage, is_futures, tp_percentage, sl_percentage, passphrase
+                )
+                
+            elif exchange_lower == 'mexc':
+                from backend.services.mexc_service import create_order as mexc_order
+                order_result = await mexc_order(
+                    api_key, api_secret, symbol, side, amount,
+                    leverage, is_futures, tp_percentage, sl_percentage
+                )
+            else:
+                raise Exception(f"Unsupported exchange: {exchange}")
+            
+            # Extract order ID from different exchange response formats
+            exchange_order_id = str(
+                order_result.get('orderId') or 
+                order_result.get('order_id') or 
+                order_result.get('id') or 
+                order_result.get('data', {}).get('orderId') or
+                order_result.get('result', {}).get('orderId') or
+                uuid.uuid4()
             )
             
             # Calculate TP/SL prices
@@ -119,6 +153,9 @@ class TradeManager:
                 else:
                     sl_price = entry_price * (1 + sl_percentage / 100)
             
+            # Calculate quantity
+            quantity = amount / entry_price
+            
             # Save trade to Firebase
             trade_data = {
                 'trade_id': trade_id,
@@ -136,7 +173,7 @@ class TradeManager:
                 'tp_percentage': tp_percentage,
                 'sl_percentage': sl_percentage,
                 'status': 'open',
-                'exchange_order_id': order_result.get('order_id'),
+                'exchange_order_id': exchange_order_id,
                 'created_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()
             }
@@ -145,12 +182,12 @@ class TradeManager:
                 ref = db.reference(f'trades/{user_id}/{trade_id}')
                 ref.set(trade_data)
             
-            logger.info(f"✅ Order placed successfully: {trade_id}")
+            logger.info(f"✅ Order placed successfully: {trade_id} (Exchange Order: {exchange_order_id})")
             
             return {
                 'success': True,
                 'trade_id': trade_id,
-                'exchange_order_id': order_result.get('order_id'),
+                'exchange_order_id': exchange_order_id,
                 'entry_price': entry_price,
                 'quantity': quantity,
                 **trade_data

@@ -6,11 +6,7 @@ const LEMONSQUEEZY_CONFIG = {
   storeId: '239668',
   storeUrl: 'https://aitraderglobal.lemonsqueezy.com',
   
-  // ⚠️ TEST MODE - Store henüz aktif değil
-  // Kimlik doğrulama tamamlandıktan sonra Live mode'a geçin
-  testMode: true,
-  
-  // ✅ VARIANT IDs - Test Mode
+  // ✅ VARIANT IDs - Test Mode (Replace with LIVE mode IDs when activated)
   variantIds: {
     free: '',
     pro: '1075011',        // EMA Navigator - Pro (TRY999.99/month)
@@ -140,8 +136,7 @@ export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
     const checkoutUrl = `${LEMONSQUEEZY_CONFIG.storeUrl}/buy/${variantId}?` +
       `checkout[email]=${encodeURIComponent(options.email)}` +
       `&checkout[name]=${encodeURIComponent(options.name)}` +
-      `&checkout[custom][user_id]=${encodeURIComponent(options.email)}` +
-      (LEMONSQUEEZY_CONFIG.testMode ? '&checkout[test_mode]=true' : '');
+      `&checkout[custom][user_id]=${encodeURIComponent(options.email)}`;
 
     console.log('🔗 Checkout URL:', checkoutUrl);
 
@@ -190,8 +185,7 @@ export const getCheckoutUrl = (
   const url = `${LEMONSQUEEZY_CONFIG.storeUrl}/buy/${variantId}?` +
     `checkout[email]=${encodeURIComponent(email)}` +
     `&checkout[name]=${encodeURIComponent(name)}` +
-    `&checkout[custom][user_id]=${encodeURIComponent(email)}` +
-    (LEMONSQUEEZY_CONFIG.testMode ? '&checkout[test_mode]=true' : '');
+    `&checkout[custom][user_id]=${encodeURIComponent(email)}`;
   
   return url;
 };
