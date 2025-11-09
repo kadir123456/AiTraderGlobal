@@ -11,6 +11,10 @@ interface StatsCardProps {
 }
 
 export const StatsCard = ({ label, value, change, icon: Icon, trend }: StatsCardProps) => {
+  // Ensure values are strings and not undefined
+  const displayValue = value ?? '-';
+  const displayChange = change ?? '-';
+  
   return (
     <Card className="border-border bg-card/50 backdrop-blur-sm">
       <CardContent className="pt-6">
@@ -22,9 +26,9 @@ export const StatsCard = ({ label, value, change, icon: Icon, trend }: StatsCard
         </div>
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-2xl font-bold">{value}</p>
+          <p className="text-2xl font-bold">{displayValue}</p>
           <p className={`text-xs ${trend === "up" ? "text-success" : "text-muted-foreground"}`}>
-            {change}
+            {displayChange}
           </p>
         </div>
       </CardContent>

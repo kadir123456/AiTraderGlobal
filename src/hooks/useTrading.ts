@@ -51,10 +51,58 @@ export const useTrading = () => {
 
   const fetchPositions = async () => {
     try {
+      console.log('📊 Fetching positions...');
       const response = await botAPI.getPositions();
-      setPositions(response.data.positions || []);
-    } catch (error) {
-      console.error('Failed to fetch positions:', error);
+      console.log('📦 Raw positions response:', response.data);
+      
+      // Parse and validate positions data
+      const rawPositions = response.data.positions || [];
+      
+      const parsedPositions: Position[] = rawPositions.map((pos: any) => {
+        // Safely parse numeric values
+        const entry = parseFloat(pos.entry || pos.entry_price || pos.entryPrice || 0);
+        const current = parseFloat(pos.current || pos.current_price || pos.currentPrice || pos.mark_price || entry);
+        const amount = parseFloat(pos.amount || pos.size || 0);
+        const leverage = parseInt(pos.leverage || 1);
+        
+        // Calculate PnL if not provided
+        let pnl = parseFloat(pos.pnl || 0);
+        let pnlPercent = parseFloat(pos.pnlPercent || pos.pnl_percent || 0);
+        
+        // If PnL not provided, calculate it
+        if (pnl === 0 && entry > 0 && current > 0) {
+          const side = (pos.side || '').toUpperCase();
+          if (side === 'LONG' || side === 'BUY') {
+            pnl = (current - entry) * amount;
+            pnlPercent = ((current - entry) / entry) * 100;
+          } else if (side === 'SHORT' || side === 'SELL') {
+            pnl = (entry - current) * amount;
+            pnlPercent = ((entry - current) / entry) * 100;
+          }
+        }
+        
+        return {
+          id: pos.id || pos.position_id || `${pos.symbol}_${Date.now()}`,
+          symbol: pos.symbol || 'UNKNOWN',
+          side: (pos.side || 'LONG').toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG',
+          entry: entry,
+          current: current,
+          pnl: pnl,
+          pnlPercent: pnlPercent,
+          exchange: pos.exchange || 'unknown',
+          amount: amount,
+          leverage: leverage,
+          tpPrice: pos.tp_price || pos.tpPrice,
+          slPrice: pos.sl_price || pos.slPrice,
+          openedAt: pos.openedAt || pos.opened_at || new Date().toISOString(),
+        };
+      });
+      
+      console.log('✅ Parsed positions:', parsedPositions);
+      setPositions(parsedPositions);
+    } catch (error: any) {
+      console.error('❌ Failed to fetch positions:', error);
+      console.error('Error details:', error.response?.data);
       setPositions([]);
     } finally {
       setLoading(false);
