@@ -60,9 +60,23 @@ const Dashboard = () => {
 
   // Calculate real stats from positions
   const stats = useMemo(() => {
-    const totalPnL = positions.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
-    const totalPnLPercent = positions.length > 0 
-      ? positions.reduce((sum, pos) => sum + (pos.pnlPercent || 0), 0) / positions.length 
+    // Safe calculation with fallback values
+    const totalPnL = positions.reduce((sum, pos) => {
+      const pnl = pos.pnl !== undefined && pos.pnl !== null ? pos.pnl : 0;
+      return sum + pnl;
+    }, 0);
+    
+    const closedPositions = positions.filter(
+      pos => pos.pnl !== undefined && pos.pnl !== null
+    );
+    
+    const totalPnLPercent = closedPositions.length > 0
+      ? closedPositions.reduce((sum, pos) => {
+          const pnlPercent = pos.pnlPercent !== undefined && pos.pnlPercent !== null 
+            ? pos.pnlPercent 
+            : 0;
+          return sum + pnlPercent;
+        }, 0) / closedPositions.length
       : 0;
 
     const displayBalance = totalPnL;
