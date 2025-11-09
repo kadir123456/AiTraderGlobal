@@ -1,29 +1,18 @@
 // LemonSqueezy Payment Integration
 // Documentation: https://docs.lemonsqueezy.com/
 
-// Configuration - Update these with your actual values
+// ✅ PRODUCTION Configuration
 const LEMONSQUEEZY_CONFIG = {
   storeId: '239668',
-  apiUrl: 'https://aitraderglobal.onrender.com',
-  // TEST MODE: These are test variant IDs
-  // Replace with production IDs when going live
+  storeUrl: 'https://aitraderglobal.lemonsqueezy.com',
+  
+  // ✅ VARIANT IDs - Test Mode (Replace with LIVE mode IDs when activated)
   variantIds: {
     free: '',
-    pro: '1075011',      // Test mode variant ID
-    enterprise: '1075030', // Test mode variant ID
+    pro: '1075011',        // EMA Navigator - Pro (TRY999.99/month)
+    enterprise: '1075030', // EMA Navigator - Enterprise (TRY12,000/month)
   },
-  // NOTE: Make sure these variants exist in your LemonSqueezy dashboard
-  // and are in TEST mode, not LIVE mode
 };
-
-export interface LemonSqueezyConfig {
-  storeId: string;
-  variantIds: {
-    free: string;
-    pro: string;
-    enterprise: string;
-  };
-}
 
 export interface CheckoutOptions {
   name: string;
@@ -39,16 +28,16 @@ export const initializeLemonSqueezy = (): Promise<void> => {
     // Check if already loaded
     if (window.LemonSqueezy) {
       console.log('✅ LemonSqueezy already loaded');
+      setupLemonSqueezy();
       resolve();
       return;
     }
 
-    // Check if script already exists in DOM
+    // Check if script already exists
     const existingScript = document.querySelector('script[src*="lemonsqueezy"]');
     if (existingScript) {
-      console.log('📜 LemonSqueezy script already in DOM, waiting for load...');
+      console.log('📜 LemonSqueezy script already in DOM');
       
-      // Wait for existing script to load
       const checkInterval = setInterval(() => {
         if (window.LemonSqueezy) {
           clearInterval(checkInterval);
@@ -58,11 +47,10 @@ export const initializeLemonSqueezy = (): Promise<void> => {
         }
       }, 100);
       
-      // Timeout after 10 seconds
       setTimeout(() => {
         clearInterval(checkInterval);
         if (!window.LemonSqueezy) {
-          console.error('❌ LemonSqueezy timeout - script loaded but object not available');
+          console.error('❌ LemonSqueezy timeout');
           reject(new Error('LemonSqueezy timeout'));
         }
       }, 10000);
@@ -75,19 +63,17 @@ export const initializeLemonSqueezy = (): Promise<void> => {
     const script = document.createElement('script');
     script.src = 'https://app.lemonsqueezy.com/js/lemon.js';
     script.async = true;
-    script.defer = false; // Changed to false for immediate execution
     
     script.onload = () => {
       console.log('📜 LemonSqueezy script loaded');
       
-      // Wait a bit for the object to be available
       setTimeout(() => {
         if (window.LemonSqueezy) {
           console.log('✅ LemonSqueezy object available');
           setupLemonSqueezy();
           resolve();
         } else {
-          console.error('❌ LemonSqueezy object not available after script load');
+          console.error('❌ LemonSqueezy object not available');
           reject(new Error('LemonSqueezy object not available'));
         }
       }, 100);
@@ -99,7 +85,6 @@ export const initializeLemonSqueezy = (): Promise<void> => {
     };
     
     document.head.appendChild(script);
-    console.log('📜 LemonSqueezy script added to document head');
   });
 };
 
@@ -115,7 +100,7 @@ const setupLemonSqueezy = () => {
         if (event === 'Checkout.Success') {
           handleCheckoutSuccess();
         } else if (event === 'Checkout.Close') {
-          console.log('🚪 Checkout closed by user');
+          console.log('🚪 Checkout closed');
         } else if (event === 'Checkout.Error') {
           console.error('❌ Checkout error');
         }
@@ -127,46 +112,40 @@ const setupLemonSqueezy = () => {
   }
 };
 
-// Open checkout for a plan
+// Open checkout
 export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
   try {
-    console.log('🛒 Opening checkout for:', options);
+    console.log('🛒 Opening checkout:', options);
     
-    const storeId = LEMONSQUEEZY_CONFIG.storeId;
-    
-    if (!storeId) {
-      throw new Error('LemonSqueezy store ID not configured.');
+    if (options.planId === 'free') {
+      throw new Error('Free plan does not require checkout');
     }
 
-    // Get variant ID for the plan
     const variantId = LEMONSQUEEZY_CONFIG.variantIds[options.planId];
 
     if (!variantId) {
-      throw new Error(`Variant ID not configured for ${options.planId} plan`);
+      throw new Error(`Variant ID not configured for ${options.planId}`);
     }
 
-    console.log(`📦 Using variant ID: ${variantId} for ${options.planId} plan`);
+    console.log(`📦 Variant ID: ${variantId} (${options.planId})`);
 
     // Ensure LemonSqueezy is loaded
     await initializeLemonSqueezy();
 
-    // ✅ FIXED: Correct checkout URL format
-    // Use /buy/ instead of /checkout/buy/
-    const checkoutUrl = `https://aitraderglobal.lemonsqueezy.com/buy/${variantId}?` +
+    // ✅ Correct checkout URL format
+    const checkoutUrl = `${LEMONSQUEEZY_CONFIG.storeUrl}/buy/${variantId}?` +
       `checkout[email]=${encodeURIComponent(options.email)}` +
       `&checkout[name]=${encodeURIComponent(options.name)}` +
-      `&checkout[custom][user_email]=${encodeURIComponent(options.email)}`;
+      `&checkout[custom][user_id]=${encodeURIComponent(options.email)}`;
 
     console.log('🔗 Checkout URL:', checkoutUrl);
 
-    // Open checkout overlay
+    // Open checkout
     if (window.LemonSqueezy && window.LemonSqueezy.Url) {
-      console.log('🚀 Opening LemonSqueezy checkout overlay...');
+      console.log('🚀 Opening LemonSqueezy overlay');
       window.LemonSqueezy.Url.Open(checkoutUrl);
     } else {
-      console.error('❌ LemonSqueezy.Url not available');
-      // Fallback: Open in new tab
-      console.log('🔄 Fallback: Opening checkout in new window');
+      console.log('🔄 Fallback: Opening in new window');
       window.open(checkoutUrl, '_blank');
     }
   } catch (error) {
@@ -175,47 +154,51 @@ export const openCheckout = async (options: CheckoutOptions): Promise<void> => {
   }
 };
 
-// Handle successful checkout
+// Handle checkout success
 const handleCheckoutSuccess = () => {
-  console.log('✅ Checkout successful! Redirecting to dashboard...');
+  console.log('✅ Checkout successful!');
   
-  // Store success flag
   localStorage.setItem('checkout_success', 'true');
   
-  // Refresh user subscription status after a delay
   setTimeout(() => {
     window.location.href = '/dashboard?payment=success';
   }, 1500);
 };
 
-// Generate checkout URL (for direct links)
-export const getCheckoutUrl = (planId: 'free' | 'pro' | 'enterprise', email: string, name: string): string => {
-  const variantId = LEMONSQUEEZY_CONFIG.variantIds[planId];
-  
-  if (!variantId) {
-    console.error(`❌ Variant ID not configured for ${planId} plan`);
+// Generate checkout URL
+export const getCheckoutUrl = (
+  planId: 'free' | 'pro' | 'enterprise',
+  email: string,
+  name: string
+): string => {
+  if (planId === 'free') {
     return '#';
   }
 
-  // ✅ FIXED: Use /buy/ instead of /checkout/buy/
-  const url = `https://aitraderglobal.lemonsqueezy.com/buy/${variantId}?` +
+  const variantId = LEMONSQUEEZY_CONFIG.variantIds[planId];
+  
+  if (!variantId) {
+    console.error(`❌ Variant ID not found for ${planId}`);
+    return '#';
+  }
+
+  const url = `${LEMONSQUEEZY_CONFIG.storeUrl}/buy/${variantId}?` +
     `checkout[email]=${encodeURIComponent(email)}` +
     `&checkout[name]=${encodeURIComponent(name)}` +
-    `&checkout[custom][user_email]=${encodeURIComponent(email)}`;
+    `&checkout[custom][user_id]=${encodeURIComponent(email)}`;
   
-  console.log(`🔗 Generated checkout URL for ${planId}:`, url);
   return url;
 };
 
-// Preload LemonSqueezy on app initialization
+// Preload LemonSqueezy
 export const preloadLemonSqueezy = () => {
   console.log('⚡ Preloading LemonSqueezy...');
   initializeLemonSqueezy().catch((error) => {
-    console.warn('⚠️ LemonSqueezy preload failed (non-critical):', error);
+    console.warn('⚠️ LemonSqueezy preload failed:', error);
   });
 };
 
-// Type augmentation
+// Type definitions
 declare global {
   interface Window {
     LemonSqueezy?: {

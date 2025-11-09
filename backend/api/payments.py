@@ -17,13 +17,14 @@ from firebase_admin import db
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
-LEMONSQUEEZY_WEBHOOK_SECRET = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
+LEMONSQUEEZY_WEBHOOK_SECRET = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "P2mF4tQx9zGj1cYh7vBn8kLp5rDs6wE3")
 FIREBASE_DATABASE_URL = os.getenv("FIREBASE_DATABASE_URL")
 
-class CheckoutSession(BaseModel):
-    variant_id: str
-    email: str
-    custom_data: Optional[dict] = None
+# ✅ Variant ID Mapping (Update when going LIVE)
+VARIANT_MAP = {
+    "1075011": "pro",        # EMA Navigator - Pro (TRY999.99/month)
+    "1075030": "enterprise",  # EMA Navigator - Enterprise (TRY12,000/month)
+}
 
 class SubscriptionInfo(BaseModel):
     plan: str
@@ -32,11 +33,10 @@ class SubscriptionInfo(BaseModel):
 
 @router.get("/subscription")
 async def get_subscription(current_user = Depends(get_current_user)):
-    """Get user's current subscription from Firebase"""
+    """Get user's current subscription"""
     try:
         user_id = current_user.get("user_id")
         
-        # Fetch from Firebase: user_subscriptions/{user_id}
         ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
         subscription = ref.get()
         
@@ -45,7 +45,8 @@ async def get_subscription(current_user = Depends(get_current_user)):
                 "plan": subscription.get("tier", "free"),
                 "status": subscription.get("status", "active"),
                 "valid_until": subscription.get("endDate"),
-                "startDate": subscription.get("startDate")
+                "startDate": subscription.get("startDate"),
+                "updatedAt": subscription.get("updatedAt")
             }
         
         return {
@@ -55,7 +56,7 @@ async def get_subscription(current_user = Depends(get_current_user)):
         }
         
     except Exception as e:
-        logger.error(f"Failed to get subscription: {str(e)}")
+        logger.error(f"❌ Failed to get subscription: {str(e)}")
         return {
             "plan": "free",
             "status": "active",
@@ -68,11 +69,11 @@ async def lemonsqueezy_webhook(request: Request):
     Handle LemonSqueezy webhooks
     
     Events:
-    - order_created: New subscription
-    - subscription_created: Recurring subscription
-    - subscription_updated: Plan change
-    - subscription_cancelled: Cancellation
-    - subscription_expired: Expiration
+    - order_created
+    - subscription_created
+    - subscription_updated
+    - subscription_cancelled
+    - subscription_expired
     """
     try:
         # Get raw body
@@ -88,6 +89,7 @@ async def lemonsqueezy_webhook(request: Request):
             ).hexdigest()
             
             if not hmac.compare_digest(signature, expected_signature):
+                logger.error(f"❌ Invalid signature: {signature}")
                 raise HTTPException(status_code=401, detail="Invalid signature")
         
         # Parse payload
@@ -96,6 +98,7 @@ async def lemonsqueezy_webhook(request: Request):
         
         event_name = payload.get("meta", {}).get("event_name")
         logger.info(f"📦 LemonSqueezy webhook: {event_name}")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
         
         if event_name == "order_created":
             await handle_order_created(payload)
@@ -107,14 +110,16 @@ async def lemonsqueezy_webhook(request: Request):
             await handle_subscription_cancelled(payload)
         elif event_name == "subscription_expired":
             await handle_subscription_expired(payload)
+        else:
+            logger.warning(f"⚠️ Unhandled event: {event_name}")
         
-        return {"status": "success"}
+        return {"status": "success", "event": event_name}
         
     except Exception as e:
-        logger.error(f"Webhook error: {str(e)}")
+        logger.error(f"❌ Webhook error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-async def update_user_subscription(user_id: str, tier: str, status: str):
+async def update_user_subscription(user_id: str, tier: str, status: str, ends_at: str = None):
     """Update user subscription in Firebase"""
     try:
         ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
@@ -126,8 +131,11 @@ async def update_user_subscription(user_id: str, tier: str, status: str):
             "updatedAt": datetime.utcnow().isoformat()
         }
         
+        if ends_at:
+            subscription_data["endDate"] = ends_at
+        
         ref.set(subscription_data)
-        logger.info(f"✅ Updated subscription for {user_id}: {tier} ({status})")
+        logger.info(f"✅ Updated subscription: {user_id} → {tier} ({status})")
         
     except Exception as e:
         logger.error(f"❌ Failed to update subscription: {str(e)}")
@@ -136,88 +144,88 @@ async def update_user_subscription(user_id: str, tier: str, status: str):
 async def get_user_id_by_email(email: str) -> Optional[str]:
     """Get user ID from Firebase by email"""
     try:
-        # Search in users collection
         users_ref = db.reference('users', url=FIREBASE_DATABASE_URL)
         users = users_ref.get()
         
         if users:
             for user_id, user_data in users.items():
                 if user_data.get('email') == email:
+                    logger.info(f"✅ Found user: {email} → {user_id}")
                     return user_id
         
-        logger.warning(f"⚠️ User not found with email: {email}")
+        logger.warning(f"⚠️ User not found: {email}")
         return None
         
     except Exception as e:
-        logger.error(f"❌ Error finding user by email: {str(e)}")
+        logger.error(f"❌ Error finding user: {str(e)}")
         return None
 
 async def handle_order_created(payload: dict):
-    """Handle new order/subscription"""
+    """Handle new order"""
     try:
         data = payload.get("data", {})
         attributes = data.get("attributes", {})
         
         user_email = attributes.get("user_email")
-        variant_id = attributes.get("first_order_item", {}).get("variant_id")
+        variant_id = str(attributes.get("first_order_item", {}).get("variant_id", ""))
         
-        # Determine plan based on variant_id
-        plan = get_plan_from_variant(variant_id)
+        plan = VARIANT_MAP.get(variant_id, "free")
         
-        logger.info(f"✅ New subscription: {user_email} -> {plan}")
+        logger.info(f"✅ Order created: {user_email} → {plan} (variant: {variant_id})")
         
-        # Get user ID from email
         user_id = await get_user_id_by_email(user_email)
         
         if user_id:
             await update_user_subscription(user_id, plan, "active")
         else:
-            logger.error(f"❌ Could not find user ID for email: {user_email}")
+            logger.error(f"❌ User not found: {user_email}")
         
     except Exception as e:
-        logger.error(f"Error handling order_created: {str(e)}")
+        logger.error(f"❌ Error in order_created: {str(e)}", exc_info=True)
 
 async def handle_subscription_created(payload: dict):
-    """Handle recurring subscription creation"""
+    """Handle subscription creation"""
     try:
         data = payload.get("data", {})
         attributes = data.get("attributes", {})
         
         user_email = attributes.get("user_email")
-        variant_id = attributes.get("variant_id")
-        status = attributes.get("status")
+        variant_id = str(attributes.get("variant_id", ""))
+        status = attributes.get("status", "active")
+        ends_at = attributes.get("ends_at")
         
-        plan = get_plan_from_variant(variant_id)
+        plan = VARIANT_MAP.get(variant_id, "free")
         
-        logger.info(f"🔄 Subscription created: {user_email} -> {plan} ({status})")
+        logger.info(f"🔄 Subscription created: {user_email} → {plan} ({status})")
         
         user_id = await get_user_id_by_email(user_email)
         if user_id:
-            await update_user_subscription(user_id, plan, status)
+            await update_user_subscription(user_id, plan, status, ends_at)
         
     except Exception as e:
-        logger.error(f"Error handling subscription_created: {str(e)}")
+        logger.error(f"❌ Error in subscription_created: {str(e)}", exc_info=True)
 
 async def handle_subscription_updated(payload: dict):
-    """Handle subscription update (plan change, renewal)"""
+    """Handle subscription update"""
     try:
         data = payload.get("data", {})
         attributes = data.get("attributes", {})
         
         user_email = attributes.get("user_email")
-        variant_id = attributes.get("variant_id")
-        status = attributes.get("status")
+        variant_id = str(attributes.get("variant_id", ""))
+        status = attributes.get("status", "active")
+        ends_at = attributes.get("ends_at")
         
-        plan = get_plan_from_variant(variant_id)
+        plan = VARIANT_MAP.get(variant_id, "free")
         
-        logger.info(f"📝 Subscription updated: {user_email} -> {plan} ({status})")
+        logger.info(f"📝 Subscription updated: {user_email} → {plan} ({status})")
         
         user_id = await get_user_id_by_email(user_email)
         if user_id:
-            await update_user_subscription(user_id, plan, status)
+            await update_user_subscription(user_id, plan, status, ends_at)
         
     except Exception as e:
-        logger.error(f"Error handling subscription_updated: {str(e)}")
+        logger.error(f"❌ Error in subscription_updated: {str(e)}", exc_info=True)
 
 async def handle_subscription_cancelled(payload: dict):
     """Handle subscription cancellation"""
@@ -226,19 +234,23 @@ async def handle_subscription_cancelled(payload: dict):
         attributes = data.get("attributes", {})
         
         user_email = attributes.get("user_email")
+        ends_at = attributes.get("ends_at")
         
         logger.info(f"❌ Subscription cancelled: {user_email}")
         
         user_id = await get_user_id_by_email(user_email)
         if user_id:
-            # Keep current plan but mark as cancelled
             ref = db.reference(f'user_subscriptions/{user_id}', url=FIREBASE_DATABASE_URL)
             current = ref.get()
             if current:
-                ref.update({"status": "cancelled"})
+                ref.update({
+                    "status": "cancelled",
+                    "endDate": ends_at,
+                    "updatedAt": datetime.utcnow().isoformat()
+                })
         
     except Exception as e:
-        logger.error(f"Error handling subscription_cancelled: {str(e)}")
+        logger.error(f"❌ Error in subscription_cancelled: {str(e)}", exc_info=True)
 
 async def handle_subscription_expired(payload: dict):
     """Handle subscription expiration"""
@@ -252,17 +264,7 @@ async def handle_subscription_expired(payload: dict):
         
         user_id = await get_user_id_by_email(user_email)
         if user_id:
-            # Downgrade to free immediately
             await update_user_subscription(user_id, "free", "expired")
         
     except Exception as e:
-        logger.error(f"Error handling subscription_expired: {str(e)}")
-
-def get_plan_from_variant(variant_id: str) -> str:
-    """Map LemonSqueezy variant ID to plan name"""
-    variant_map = {
-        "1075011": "pro",        # Pro Monthly (999 TRY / 29.99 USD)
-        "1075030": "enterprise",  # Enterprise Monthly (3499 TRY / 99.99 USD)
-    }
-    
-    return variant_map.get(str(variant_id), "free")
+        logger.error(f"❌ Error in subscription_expired: {str(e)}", exc_info=True)

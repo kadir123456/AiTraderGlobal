@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { PricingModal } from "@/components/PricingModal";
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -29,6 +30,7 @@ const Dashboard = () => {
   const { isAdmin } = useAdmin();
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
+  const [pricingModalOpen, setPricingModalOpen] = useState(false);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -159,7 +161,7 @@ const Dashboard = () => {
               <Button variant="default" size="sm" onClick={() => navigate('/trading')}>
                 {t('dashboard.open_trade')}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate('/pricing')}>
+              <Button variant="outline" size="sm" onClick={() => setPricingModalOpen(true)}>
                 {t('nav.pricing')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>
@@ -198,7 +200,7 @@ const Dashboard = () => {
                     <Button 
                       variant="outline" 
                       className="w-full justify-start" 
-                      onClick={() => navigate('/pricing')}
+                      onClick={() => setPricingModalOpen(true)}
                     >
                       {t('nav.pricing')}
                     </Button>
@@ -381,6 +383,9 @@ const Dashboard = () => {
           <TransactionHistoryTable />
         </div>
       </main>
+
+      {/* Pricing Modal */}
+      <PricingModal open={pricingModalOpen} onOpenChange={setPricingModalOpen} />
     </div>
   );
 };
