@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Loader2, Zap } from 'lucide-react';
 import { useExchanges } from '@/hooks/useExchanges';
 import { useTrading } from '@/hooks/useTrading';
 import { useTradingSettings } from '@/hooks/useTradingSettings';
@@ -20,14 +20,20 @@ interface Coin {
   price: number;
 }
 
-export const TradingForm = () => {
+interface TradingFormProps {
+  selectedCoinProp?: string;
+  onCoinChange?: (coin: string) => void;
+  signalData?: any;
+}
+
+export const TradingForm = ({ selectedCoinProp, onCoinChange, signalData }: TradingFormProps = {}) => {
   const { t } = useTranslation();
   const { exchanges } = useExchanges();
   const { openPosition, canOpenMore, maxPositions } = useTrading();
   const { settings } = useTradingSettings();
   
   const [selectedExchange, setSelectedExchange] = useState<string>('');
-  const [selectedCoin, setSelectedCoin] = useState<string>('');
+  const [selectedCoin, setSelectedCoin] = useState<string>('BTCUSDT');
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState<string>('');
   const [leverage, setLeverage] = useState<string>(settings.defaultLeverage.toString());
@@ -62,6 +68,33 @@ export const TradingForm = () => {
     setCoins(popularCoins);
   }, [selectedExchange]);
 
+  // Sync with parent's selected coin
+  useEffect(() => {
+    if (selectedCoinProp && selectedCoinProp !== selectedCoin) {
+      setSelectedCoin(selectedCoinProp);
+    }
+  }, [selectedCoinProp]);
+
+  // Auto-fill form when signal is clicked
+  useEffect(() => {
+    if (signalData) {
+      const tpPercent = ((signalData.tp - signalData.price) / signalData.price) * 100;
+      const slPercent = ((signalData.price - signalData.sl) / signalData.price) * 100;
+      
+      setTpPercent(Math.abs(tpPercent).toFixed(2));
+      setSlPercent(Math.abs(slPercent).toFixed(2));
+      setSide(signalData.type === 'BUY' ? 'LONG' : 'SHORT');
+      
+      toast.success(
+        `${signalData.type} sinyali forma yüklendi!`,
+        {
+          icon: signalData.strength === 'STRONG' ? '⚡' : '✅',
+          description: `TP: ${Math.abs(tpPercent).toFixed(2)}% | SL: ${Math.abs(slPercent).toFixed(2)}%`
+        }
+      );
+    }
+  }, [signalData]);
+
   useEffect(() => {
     if (selectedCoin && selectedExchange) {
       fetchEmaSignal();
@@ -82,6 +115,13 @@ export const TradingForm = () => {
       console.error('Failed to fetch EMA signal:', error);
     } finally {
       setLoadingSignal(false);
+    }
+  };
+
+  const handleCoinChange = (coin: string) => {
+    setSelectedCoin(coin);
+    if (onCoinChange) {
+      onCoinChange(coin);
     }
   };
 
@@ -113,7 +153,6 @@ export const TradingForm = () => {
 
       // Reset form
       setAmount('');
-      setSelectedCoin('');
     } catch (error: any) {
       console.error('Position opening error:', error);
     } finally {
@@ -150,6 +189,32 @@ export const TradingForm = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Signal Badge */}
+        {signalData && (
+          <div className={`p-3 rounded-lg border-2 ${
+            signalData.type === 'BUY' 
+              ? 'bg-green-500/10 border-green-500' 
+              : 'bg-red-500/10 border-red-500'
+          } animate-pulse`}>
+            <div className="flex items-center justify-between">
+              <span className="font-bold flex items-center gap-2">
+                {signalData.type === 'BUY' ? (
+                  <TrendingUp className="h-5 w-5" />
+                ) : (
+                  <TrendingDown className="h-5 w-5" />
+                )}
+                {signalData.type} Signal
+              </span>
+              {signalData.strength === 'STRONG' && (
+                <Zap className="h-5 w-5 text-yellow-500" />
+              )}
+            </div>
+            <p className="text-xs mt-1">
+              Entry: ${signalData.price.toFixed(2)} | TP: ${signalData.tp.toFixed(2)} | SL: ${signalData.sl.toFixed(2)}
+            </p>
+          </div>
+        )}
+
         {/* Long/Short Tabs */}
         <Tabs value={side} onValueChange={(v) => setSide(v as 'LONG' | 'SHORT')}>
           <TabsList className="grid w-full grid-cols-2">
@@ -184,7 +249,7 @@ export const TradingForm = () => {
         {/* Coin Selection */}
         <div className="space-y-2">
           <Label>{t('trading.trading_pair')}</Label>
-          <Select value={selectedCoin} onValueChange={setSelectedCoin} disabled={loadingCoins}>
+          <Select value={selectedCoin} onValueChange={handleCoinChange} disabled={loadingCoins}>
             <SelectTrigger>
               <SelectValue placeholder={t('trading.select_coin')} />
             </SelectTrigger>
@@ -197,46 +262,6 @@ export const TradingForm = () => {
             </SelectContent>
           </Select>
         </div>
-
-        {/* Interval Selection */}
-        <div className="space-y-2">
-          <Label>{t('trading.interval')}</Label>
-          <Select value={interval} onValueChange={setInterval}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="15m">15 {t('trading.minutes')}</SelectItem>
-              <SelectItem value="30m">30 {t('trading.minutes')}</SelectItem>
-              <SelectItem value="1h">1 {t('trading.hour')}</SelectItem>
-              <SelectItem value="4h">4 {t('trading.hours')}</SelectItem>
-              <SelectItem value="1d">1 {t('trading.day')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* EMA Signal */}
-        {emaSignal && (
-          <div className={`p-3 rounded-lg border ${
-            emaSignal.signal === 'BUY' ? 'bg-success/10 border-success' :
-            emaSignal.signal === 'SELL' ? 'bg-destructive/10 border-destructive' :
-            'bg-muted border-border'
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">EMA Signal:</span>
-              <span className={`font-bold ${
-                emaSignal.signal === 'BUY' ? 'text-success' :
-                emaSignal.signal === 'SELL' ? 'text-destructive' :
-                'text-muted-foreground'
-              }`}>
-                {emaSignal.signal}
-              </span>
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              EMA9: {emaSignal.ema9} | EMA21: {emaSignal.ema21}
-            </div>
-          </div>
-        )}
 
         {/* Amount & Leverage */}
         <div className="grid grid-cols-2 gap-4">

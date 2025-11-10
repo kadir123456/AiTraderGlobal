@@ -5,16 +5,19 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { TradingForm } from '@/components/TradingForm';
 import { PositionCard } from '@/components/PositionCard';
+import { TradingChart } from '@/components/TradingChart';
 import { useTrading } from '@/hooks/useTrading';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 
 const Trading = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { positions, loading, refreshPositions } = useTrading();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<string>('BTCUSDT');
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -76,6 +79,19 @@ const Trading = () => {
           </AlertDescription>
         </Alert>
 
+        {/* Trading Chart - Full Width */}
+        <div className="mb-6">
+          <TradingChart 
+            symbol={selectedCoin} 
+            exchange="binance"
+            onSignalClick={(signal) => {
+              toast.success(`${signal.type} sinyali yakalandı!`, {
+                description: `Entry: $${signal.price.toFixed(2)} | TP: $${signal.tp.toFixed(2)} | SL: $${signal.sl.toFixed(2)}`
+              });
+            }}
+          />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Trading Form - Left Side */}
           <div className="lg:col-span-1">
@@ -92,7 +108,7 @@ const Trading = () => {
                 </div>
               </CardContent>
             </Card>
-            <TradingForm />
+            <TradingForm onCoinChange={setSelectedCoin} />
           </div>
 
           {/* Open Positions - Right Side */}
