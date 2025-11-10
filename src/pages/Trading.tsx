@@ -18,6 +18,7 @@ const Trading = () => {
   const { positions, loading, refreshPositions } = useTrading();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCoin, setSelectedCoin] = useState<string>('BTCUSDT');
+  const [signalData, setSignalData] = useState<any>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -25,10 +26,18 @@ const Trading = () => {
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
+  const handleSignalClick = (signal: any) => {
+    setSignalData(signal);
+    toast.success(`${signal.type} sinyali yakalandı!`, {
+      description: `Entry: $${signal.price.toFixed(2)} | TP: $${signal.tp.toFixed(2)} | SL: $${signal.sl.toFixed(2)}`,
+      icon: signal.strength === 'STRONG' ? '⚡' : '✅',
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -49,15 +58,15 @@ const Trading = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 md:py-8">
         {/* How to Use - Info Card */}
         <Card className="border-primary/20 bg-primary/5 mb-6 animate-fade-in">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
               <div className="space-y-2">
-                <h3 className="font-semibold text-lg">📊 Manuel İşlem Nasıl Yapılır?</h3>
-                <ol className="list-decimal pl-5 space-y-1.5 text-sm text-muted-foreground">
+                <h3 className="font-semibold text-base md:text-lg">📊 Manuel İşlem Nasıl Yapılır?</h3>
+                <ol className="list-decimal pl-5 space-y-1.5 text-xs md:text-sm text-muted-foreground">
                   <li>Soldaki formdan işlem yapmak istediğiniz <strong>borsayı seçin</strong></li>
                   <li>İşlem yapacağınız <strong>coin çiftini</strong> girin (örn: BTCUSDT)</li>
                   <li><strong>LONG</strong> (yükseliş) veya <strong>SHORT</strong> (düşüş) pozisyon seçin</li>
@@ -73,7 +82,7 @@ const Trading = () => {
         {/* Risk Warning */}
         <Alert className="mb-6 border-destructive/50 bg-destructive/10 animate-fade-in">
           <AlertTriangle className="h-4 w-4 text-destructive" />
-          <AlertDescription className="text-sm">
+          <AlertDescription className="text-xs md:text-sm">
             <strong>Risk Uyarısı:</strong> Futures işlemleri yüksek risklidir. Sadece kaybetmeyi göze alabileceğiniz miktarlarla işlem yapın. 
             Yüksek kaldıraç kullanımı kazancınızı artırabilir ancak aynı zamanda kayıplarınızı da büyütür.
           </AlertDescription>
@@ -84,15 +93,11 @@ const Trading = () => {
           <TradingChart 
             symbol={selectedCoin} 
             exchange="binance"
-            onSignalClick={(signal) => {
-              toast.success(`${signal.type} sinyali yakalandı!`, {
-                description: `Entry: $${signal.price.toFixed(2)} | TP: $${signal.tp.toFixed(2)} | SL: $${signal.sl.toFixed(2)}`
-              });
-            }}
+            onSignalClick={handleSignalClick}
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Trading Form - Left Side */}
           <div className="lg:col-span-1">
             <Card className="border-primary/20 mb-4">
@@ -108,7 +113,10 @@ const Trading = () => {
                 </div>
               </CardContent>
             </Card>
-            <TradingForm onCoinChange={setSelectedCoin} />
+            <TradingForm 
+              onCoinChange={setSelectedCoin} 
+              signalData={signalData}
+            />
           </div>
 
           {/* Open Positions - Right Side */}
@@ -132,7 +140,7 @@ const Trading = () => {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg">Pozisyonlarım</CardTitle>
+                    <CardTitle className="text-base md:text-lg">Pozisyonlarım</CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
                       {positions.length > 0 
                         ? `${positions.length} aktif pozisyon` 
@@ -145,8 +153,8 @@ const Trading = () => {
                     onClick={handleRefresh}
                     disabled={isRefreshing}
                   >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    {t('common.refresh')}
+                    <RefreshCw className={`h-4 w-4 md:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    <span className="hidden md:inline">{t('common.refresh')}</span>
                   </Button>
                 </div>
               </CardHeader>
@@ -159,7 +167,7 @@ const Trading = () => {
                 ) : positions.length === 0 ? (
                   <div className="text-center py-12">
                     <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                    <p className="font-medium text-lg mb-2">{t('trading.no_positions')}</p>
+                    <p className="font-medium text-base md:text-lg mb-2">{t('trading.no_positions')}</p>
                     <p className="text-sm text-muted-foreground mb-1">{t('trading.open_first_position')}</p>
                     <p className="text-xs text-muted-foreground">
                       Soldaki formu kullanarak ilk pozisyonunuzu açabilirsiniz
